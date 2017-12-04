@@ -1,6 +1,7 @@
-from Surganizing.Module import Module
+#from Surganizing.Module import Module
 import numpy as np
 from matplotlib import pyplot as plt
+from Module import Module
 
 size = 3
 steps = 1000
@@ -12,6 +13,8 @@ positive_out = np.zeros((steps, 2, size))
 negative_out = np.zeros((steps, 2, size))
 
 predictions = np.array([[1,0,0],[0,0,0]])
+
+print("hey")
 
 for t in range(int(steps/2)):
     module.step(predictions)
