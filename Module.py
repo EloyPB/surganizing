@@ -5,7 +5,7 @@ class Module:
     def __init__(self, size, tau):
         self.size = size
         self.tau_head = tau
-        self.tau_errors = tau / 20
+        self.tau_fast = tau / 20
 
         self.head = np.zeros(size)
         self.head_out = np.zeros(size)
@@ -30,10 +30,11 @@ class Module:
     def step(self, predictions):
         self.head += (-self.head + self.head_out + self.negative_out[0] - self.positive_out[0]) / self.tau_head
         self.head_out = self.activation(self.head)
-        self.positive += (-self.positive + self.head_out - predictions) / self.tau_errors
+        self.positive += (-self.positive + self.head_out - predictions) / self.tau_fast
         self.positive_out = self.saturation(self.positive)
         self.negative_out = self.saturation(-self.positive)
-        self.novelty = np.sum(self.positive_out[1])
+        self.novelty += (-self.novelty + np.sum(self.positive_out[1])) / self.tau_fast
+        self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.tau_fast
 
     def saturation(self, value):
         """Saturates 'value' between 0 and 1"""
