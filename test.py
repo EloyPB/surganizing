@@ -1,39 +1,22 @@
-#from Surganizing.Module import Module
-import numpy as np
-from matplotlib import pyplot as plt
 from Module import Module
+import numpy as np
 
 size = 3
-steps = 1000
 module = Module(size, 50)
-head_out = np.zeros((steps, size))
-novelty = np.zeros((steps, size))
-inhibition = np.zeros((steps, size))
-positive_out = np.zeros((steps, 2, size))
-negative_out = np.zeros((steps, 2, size))
 
-predictions = np.array([[1,0,0],[0,0,0]])
+predictions = np.array([[1, 0, 0], [0, 0, 0]])
+head_input = np.array([0, 0, 0])
 
-print("hey")
+for i in range(500):
+    module.step(predictions, head_input)
 
-for t in range(int(steps/2)):
-    module.step(predictions)
-    head_out[t] = module.head_out
-    positive_out[t] = module.positive_out
-    negative_out[t] = module.negative_out
-    novelty[t] = module.novelty
+predictions = np.array([[0, 0, 0], [0, 0, 0]])
+for i in range(500):
+    module.step(predictions, head_input)
 
-predictions = np.array([[0,0,0],[0,0,0]])
+head_input = np.array([0, 1, 0.5])
+for i in range(500):
+    module.step(predictions, head_input)
 
-for t in range(int(steps/2), steps):
-    module.step(predictions)
-    head_out[t] = module.head_out
-    positive_out[t] = module.positive_out
-    negative_out[t] = module.negative_out
-    novelty[t] = module.novelty
-
-plt.plot(head_out[:,0])
-plt.plot(positive_out[:,0,0])
-plt.plot(negative_out[:,0,0])
-plt.plot(novelty[:,0])
-plt.show()
+#module.plot_heads()
+module.plot_circuits()
