@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b2382d00-b59b-488f-8f1c-e759abf98833" name="Default" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" afterPath="$PROJECT_DIR$/.idea/misc.xml" />
-      <change beforePath="$PROJECT_DIR$/.idea/surganizing.iml" afterPath="$PROJECT_DIR$/.idea/surganizing.iml" />
+    <list default="true" id="b2382d00-b59b-488f-8f1c-e759abf98833" name="Default" comment="slow noise selects random neuron">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change beforePath="$PROJECT_DIR$/Module.py" afterPath="$PROJECT_DIR$/Module.py" />
-      <change beforePath="$PROJECT_DIR$/test.py" afterPath="$PROJECT_DIR$/test.py" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
@@ -272,7 +268,14 @@
       <option name="project" value="LOCAL" />
       <updated>1519655924481</updated>
     </task>
-    <option name="localTasksCounter" value="2" />
+    <task id="LOCAL-00002" summary="slow noise selects random neuron">
+      <created>1519659086815</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1519659086815</updated>
+    </task>
+    <option name="localTasksCounter" value="3" />
     <servers />
   </component>
   <component name="ToolWindowManager">
@@ -303,7 +306,8 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="basic learning" />
-    <option name="LAST_COMMIT_MESSAGE" value="basic learning" />
+    <MESSAGE value="slow noise selects random neuron" />
+    <option name="LAST_COMMIT_MESSAGE" value="slow noise selects random neuron" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
