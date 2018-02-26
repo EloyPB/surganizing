@@ -1,22 +1,28 @@
 from Module import Module
 import numpy as np
 
-size = 3
-module = Module(size, 50)
+sizes = [3, 2]
+s_pairs = [2, 1]
+learning_rate = 0.005
+tau = 50
 
-predictions = np.array([[1, 0, 0], [0, 0, 0]])
-head_input = np.array([0, 0, 0])
+A = Module(sizes[0], s_pairs[0], learning_rate, tau)
+B = Module(sizes[1], s_pairs[1], learning_rate, tau)
 
-for i in range(500):
-    module.step(predictions, head_input)
+B.enable_connections(to_s_pair=0, from_modules=[A])
+B.initialize_weights()
 
-predictions = np.array([[0, 0, 0], [0, 0, 0]])
-for i in range(500):
-    module.step(predictions, head_input)
+modules = [A, B]
+head_input = [np.zeros(size) for size in sizes]
+s_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(s_pairs, sizes)]
 
-head_input = np.array([0, 1, 0.5])
-for i in range(500):
-    module.step(predictions, head_input)
+s_input[0][0, 0] = 1
+head_input[1][1] = 1
 
-#module.plot_heads()
-module.plot_circuits()
+for t in range(1000):
+    for module_num, module in enumerate(modules):
+        module.step(head_input[module_num], s_input[module_num])
+
+for module in modules:
+    print(module.weights)
+    module.plot_circuits(show=module is modules[-1])
