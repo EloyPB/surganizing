@@ -26,6 +26,23 @@ class Module:
         self.saturation = np.vectorize(saturation, otypes=[np.float])
         self.activation = np.vectorize(activation, otypes=[np.float])
 
+        self.noise = 0
+        self.noise_target = 0
+        self.noise_step = 0
+        self.noise_period = tau
+        self.noise_alpha = 0.9
+        self.noise_low = -0.1
+        self.noise_high = 0.1
+
+    def slow_noise(self):
+        if self.noise_step < self.noise_period:
+            self.noise_step += 1
+        else:
+            self.noise_step = 0
+            self.noise_target = np.random.uniform(self.noise_low, self.noise_high, self.size)
+        self.noise = self.noise_alpha*self.noise + (1-self.noise_alpha)*self.noise_target
+        return self.noise
+
     def enable_connections(self, to_s_pair, from_modules):
         self.to_s_pairs.append(to_s_pair)
         self.from_modules[to_s_pair] = from_modules
@@ -47,7 +64,7 @@ class Module:
                                                               -self.should[s_pair][np.newaxis])
 
         self.head += (-self.head + 2*self.head_out[-1] - self.inhibition + head_input + self.should_out[-1][0]
-                      - self.should_not_out[-1][0]) / self.tau_head
+                      - self.should_not_out[-1][0] + self.slow_noise()) / self.tau_head
         self.head_out.append(self.saturation(np.tanh(3*self.head)))
         self.inhibition += (-self.inhibition + np.sum(self.head_out[-1])) / self.tau_fast
 
