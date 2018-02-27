@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 
 class Module:
-    def __init__(self, size, s_pairs, learning_rate, tau):
+    def __init__(self, size, s_pairs, learning_rate, tau, noise_max_range):
         self.size = size
         self.s_pairs = s_pairs
         self.tau_head = tau
@@ -20,26 +20,25 @@ class Module:
         self.to_s_pairs = []
         self.from_modules = [None]*self.s_pairs
         self.weights = [None]*self.s_pairs
+        self.weights_fitness = [None]*self.s_pairs
 
         self.learning_rate = learning_rate
-
-        self.saturation = np.vectorize(saturation, otypes=[np.float])
-        self.activation = np.vectorize(activation, otypes=[np.float])
 
         self.noise = 0
         self.noise_target = 0
         self.noise_step = 0
         self.noise_period = tau
         self.noise_alpha = 0.9
-        self.noise_low = -0.1
-        self.noise_high = 0.1
+        self.noise_max_range = noise_max_range
+        self.noise_range = noise_max_range*np.ones(self.size)
 
     def slow_noise(self):
+        self.noise_range = np.clip(self.noise_range + 0.0000002 - 0.0002*self.head_out[-1], 0, self.noise_max_range)
         if self.noise_step < self.noise_period:
             self.noise_step += 1
         else:
             self.noise_step = 0
-            self.noise_target = np.random.uniform(self.noise_low, self.noise_high, self.size)
+            self.noise_target = np.random.uniform(-self.noise_range, self.noise_range, self.size)
         self.noise = self.noise_alpha*self.noise + (1-self.noise_alpha)*self.noise_target
         return self.noise
 
@@ -53,8 +52,10 @@ class Module:
             for module in self.from_modules[s_pair]:
                 input_size += module.size
             self.weights[s_pair] = np.zeros((input_size, self.size))
+            self.weights_fitness[s_pair] = np.zeros((input_size, self.size))
 
     def step(self, head_input, s_input):
+        # calculate input to 'should' neurons and update weights
         for s_pair in self.to_s_pairs:
             input_values = []
             for module in self.from_modules[s_pair]:
@@ -62,15 +63,17 @@ class Module:
             self.should_input[s_pair] = np.dot(input_values, self.weights[s_pair])
             self.weights[s_pair] += self.learning_rate*np.dot(input_values[np.newaxis].transpose(),
                                                               -self.should[s_pair][np.newaxis])
+            # self.weights[s_pair] = self.weights[s_pair]/np.maximum(np.sum(self.weights[s_pair], 0), 1)
 
+        # update the activity of neurons
         self.head += (-self.head + 2*self.head_out[-1] - self.inhibition + head_input + self.should_out[-1][0]
                       - self.should_not_out[-1][0] + self.slow_noise()) / self.tau_head
-        self.head_out.append(self.saturation(np.tanh(3*self.head)))
+        self.head_out.append(np.clip(np.tanh(3*self.head), 0, 1))
         self.inhibition += (-self.inhibition + np.sum(self.head_out[-1])) / self.tau_fast
 
         self.should += (-self.should - self.head_out[-1] + s_input + self.should_input) / self.tau_fast
-        self.should_out.append(self.saturation(self.should))
-        self.should_not_out.append(self.saturation(-self.should))
+        self.should_out.append(np.clip(self.should, 0, 1))
+        self.should_not_out.append(np.clip(-self.should, 0, 1))
 
     def plot_heads(self):
         fig, ax = plt.subplots()
@@ -100,24 +103,4 @@ class Module:
             return max(circuit_num, s_pair_num)
         else:
             return circuit_num, s_pair_num
-
-
-def saturation(value):
-    """Saturates 'value' between 0 and 1"""
-    if value < 0:
-        return 0
-    elif value > 1:
-        return 1
-    else:
-        return value
-
-
-def activation(value):
-    """Activation function for the head neurons"""
-    if value <= 0.25:
-        return 0
-    elif value <= 0.75:
-        return 2 * value - 0.5
-    else:
-        return 1
 
