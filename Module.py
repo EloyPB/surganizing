@@ -1,12 +1,14 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from copy import deepcopy
 
 
 class Module:
-    def __init__(self, size, s_pairs, s_pair_weights, learning_rate, time_constant, noise_max_amplitude,
+    def __init__(self, name, size, s_pairs, s_pair_weights, learning_rate, time_constant, noise_max_amplitude,
                  log_h=False, log_h_out=True, log_s=False, log_s_out=True, log_sn_out=True, log_inhibition=False,
                  log_weights=True, log_noise_amplitude=False):
 
+        self.name = name
         self.size = size
         self.s_pairs = s_pairs
         self.s_pair_weights = np.array(s_pair_weights)
@@ -47,7 +49,7 @@ class Module:
         self.from_modules = [None]*self.s_pairs
         self.weights = [None]*self.s_pairs
         if log_weights:
-            self.weights_log = [[None]*self.s_pairs]
+            self.weights_log = [None]*self.s_pairs
 
         self.noise = 0
         self.noise_target = 0
@@ -84,7 +86,7 @@ class Module:
                 input_size += module.size
             self.weights[s_pair] = np.zeros((input_size, self.size))
             if self.log_weights:
-                self.weights_log[0][s_pair] = np.zeros((input_size, self.size))
+                self.weights_log[s_pair] = [np.zeros((input_size, self.size))]
 
     def step(self, h_input, s_input):
         # calculate input to 's' neurons and update weights
@@ -95,6 +97,8 @@ class Module:
             self.s_input[s_pair] = np.dot(input_values, self.weights[s_pair])
             self.weights[s_pair] += self.learning_rate*np.dot(input_values[np.newaxis].transpose(),
                                                               -self.s[s_pair][np.newaxis])
+            if self.log_weights:
+                self.weights_log[s_pair].append(deepcopy(self.weights[s_pair]))
 
         # update the activity of neurons
         self.h += (-self.h + 2*self.h_out - self.inhibition + h_input + np.dot(self.s_pair_weights, self.s_out)
@@ -126,23 +130,55 @@ class Module:
         plt.show()
 
     def plot_circuits(self, show):
-        fig, ax = plt.subplots(self.size, self.s_pairs, sharex=True, sharey=True)
-        for circuit_num in range(self.size):
-            for s_pair_num in range(self.s_pairs):
-                axes_indices = self.axes_indices(circuit_num, s_pair_num)
-                ax[axes_indices].plot(np.array(self.h_out_log)[:, circuit_num], 'b',
-                                      label=r"$H_" + str(circuit_num) + "$")
-                ax[axes_indices].plot(np.array(self.sn_out_log)[:, s_pair_num, circuit_num], 'r',
-                                      label=r"$N_{" + str(circuit_num) + "," + str(s_pair_num) + "}$")
-                ax[axes_indices].plot(np.array(self.s_out_log)[:, s_pair_num, circuit_num], 'g',
-                                      label=r"$S_{" + str(circuit_num) + "," + str(s_pair_num) + "}$")
+        if self.log_h_out or self.log_s_out or self.log_sn_out:
+            fig, ax = plt.subplots(self.size, self.s_pairs, sharex=True, sharey=True)
+            fig.suptitle("Neural Circuits in Module " + self.name, size='large')
+            for circuit_num in range(self.size):
+                for s_pair_num in range(self.s_pairs):
+                    axes_indices = self.axes_indices(circuit_num, s_pair_num, self.s_pairs)
+                    if circuit_num == 0:
+                        ax[axes_indices].set_title("S-Pair " + str(s_pair_num), size='medium')
+                    if s_pair_num == 0:
+                        ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
+                    if self.log_h_out:
+                        ax[axes_indices].plot(np.array(self.h_out_log)[:, circuit_num], 'b',
+                                              label=r"$H_" + str(circuit_num) + "$")
+                    if self.log_sn_out:
+                        ax[axes_indices].plot(np.array(self.sn_out_log)[:, s_pair_num, circuit_num], 'r',
+                                              label=r"$N_{" + str(circuit_num) + "," + str(s_pair_num) + "}$")
+                    if self.log_s_out:
+                        ax[axes_indices].plot(np.array(self.s_out_log)[:, s_pair_num, circuit_num], 'g',
+                                              label=r"$S_{" + str(circuit_num) + "," + str(s_pair_num) + "}$")
+                    ax[axes_indices].legend(loc='lower right')
 
-                ax[self.axes_indices(circuit_num, s_pair_num)].legend(loc='lower right')
+        if self.log_noise_amplitude:
+            fig, ax = plt.subplots(self.size, sharex=True)
+            fig.suptitle("Noise Amplitude in Module " + self.name, size='large')
+            for circuit_num in range(self.size):
+                ax[circuit_num].plot(np.array(self.noise_amplitude_log)[:, circuit_num])
+                ax[circuit_num].set_ylabel("Circuit " + str(circuit_num))
+
+        if self.log_weights:
+            fig, ax = plt.subplots(self.size, len(self.to_s_pairs), sharex=True, sharey=True)
+            fig.suptitle("Incoming Weights in Module " + self.name, size='large')
+            for s_pair_num, s_pair in enumerate(self.to_s_pairs):
+                input_size = self.weights[s_pair].shape[0]
+                for circuit_num in range(self.size):
+                    axes_indices = self.axes_indices(circuit_num, s_pair_num, len(self.to_s_pairs))
+                    if circuit_num == 0:
+                        ax[axes_indices].set_title("S-Pair " + str(s_pair), size='medium')
+                    if s_pair_num == 0:
+                        ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
+                    for input_num in range(input_size):
+                        ax[axes_indices].plot(np.array(self.weights_log[s_pair])[:, input_num, circuit_num],
+                                              label=r"$W_{H_" + str(input_num) +r"\rightarrow S_" + str(circuit_num) + "}$")
+                    ax[axes_indices].legend(loc='lower right')
+
         if show:
             plt.show()
 
-    def axes_indices(self, circuit_num, s_pair_num):
-        if self.s_pairs == 1 or self.size == 1:
+    def axes_indices(self, circuit_num, s_pair_num, max_s_pairs):
+        if max_s_pairs == 1 or self.size == 1:
             return max(circuit_num, s_pair_num)
         else:
             return circuit_num, s_pair_num
