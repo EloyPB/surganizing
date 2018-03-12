@@ -13,7 +13,7 @@ class Module:
         self.s_pairs = s_pairs
         self.s_pair_weights = np.array(s_pair_weights)
         self.learning_rate = learning_rate
-        self.time_constant_h = time_constant
+        self.time_constant = time_constant
         self.fast_time_constant = time_constant / 20
         self.noise_max_amplitude = noise_max_amplitude
         self.log_h = log_h
@@ -31,6 +31,7 @@ class Module:
         self.h_out = np.zeros(size)
         if log_h_out:
             self.h_out_log = [np.zeros(size)]
+        self.h_out_delayed = np.zeros(size)
         self.s_input = np.zeros((self.s_pairs, size))
         self.s = np.zeros((self.s_pairs, size))
         if log_s:
@@ -54,8 +55,8 @@ class Module:
         self.noise = 0
         self.noise_target = 0
         self.noise_step = 0
-        self.noise_period = time_constant
-        self.noise_alpha = 0.9
+        self.noise_period = 2*time_constant
+        self.noise_alpha = 0.98
         self.noise_amplitude = noise_max_amplitude*np.ones(self.size)
         if log_noise_amplitude:
             self.noise_amplitude_log = [noise_max_amplitude*np.ones(self.size)]
@@ -92,8 +93,10 @@ class Module:
         # calculate input to 's' neurons and update weights
         for s_pair in self.to_s_pairs:
             input_values = []
+            input_values_delayed = []
             for module in self.from_modules[s_pair]:
                 input_values = np.append(input_values, module.h_out)
+                input_values_delayed = np.append(input_values_delayed, module.h_out)
             self.s_input[s_pair] = np.dot(input_values, self.weights[s_pair])
             self.weights[s_pair] += self.learning_rate*np.dot(input_values[np.newaxis].transpose(),
                                                               -self.s[s_pair][np.newaxis])
@@ -101,11 +104,12 @@ class Module:
                 self.weights_log[s_pair].append(deepcopy(self.weights[s_pair]))
 
         # update the activity of neurons
-        self.h += (-self.h + 2*self.h_out - self.inhibition + h_input + np.dot(self.s_pair_weights, self.s_out)
-                   - np.dot(self.s_pair_weights, self.sn_out) + self.slow_noise()) / self.time_constant_h
+        self.h += (-self.h + 2*self.h_out - self.inhibition + h_input + np.dot(0.05*self.s_pair_weights, self.s_out)
+                   - np.dot(self.s_pair_weights, self.sn_out) + self.slow_noise()) / self.time_constant
         if self.log_h:
             self.h_log.append(self.h)
         self.h_out = np.clip(np.tanh(3*self.h), 0, 1)
+        self.h_out_delayed += (-self.h_out_delayed + self.h_out) / self.time_constant
         if self.log_h_out:
             self.h_out_log.append(self.h_out)
         self.inhibition += (-self.inhibition + np.sum(self.h_out)) / self.fast_time_constant

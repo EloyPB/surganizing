@@ -1,9 +1,9 @@
 from Module import Module
 import numpy as np
 
-sizes = [2, 3]
+sizes = [3, 3]
 s_pairs = [2, 1]
-s_pair_weights = [[1, 0], [1]]
+s_pair_weights = [[1.2, 0], [1.2]]
 learning_rate = 0.005
 tau = 50
 
@@ -25,7 +25,8 @@ modules = [A, B]
 head_input = [np.zeros(size) for size in sizes]
 s_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(s_pairs, sizes)]
 
-for input_num in range(sizes[0]):
+for input_num in range(2*sizes[0]):
+    input_num = input_num%sizes[0]
     s_input[0][0, input_num] = 1
     for t in range(2000):
         for module_num, module in enumerate(modules):
