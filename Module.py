@@ -1,20 +1,21 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from copy import deepcopy
+import matplotlib.colors as colors
 
 
 class Module:
-    def __init__(self, name, size, s_pairs, s_pair_weights, learning_rate, time_constant, noise_max_amplitude,
-                 dendrite_threshold = 0.6, log_h=False, log_h_out=True, log_s=False, log_s_diff=False, log_s_out=True,
-                 log_sn_out=True, log_inhibition=False, log_weights=True, log_noise_amplitude=False):
+    def __init__(self, name, size, s_pairs, s_pair_weights, time_constant, noise_max_amplitude,
+                 dendrite_threshold=0.6, log_h=False, log_h_out=True, log_s=False,
+                 log_s_diff=False, log_s_out=True, log_sn_out=True, log_inhibition=False, log_weights=True,
+                 log_noise_amplitude=False, WTA=True):
 
         self.name = name
         self.size = size
         self.s_pairs = s_pairs
         self.s_pair_weights = np.array(s_pair_weights)
-        self.learning_rate = learning_rate
         self.time_constant = time_constant
-        self.fast_time_constant = time_constant / 20
+        self.fast_time_constant = time_constant / 10
         self.noise_max_amplitude = noise_max_amplitude
         self.log_h = log_h
         self.log_h_out = log_h_out
@@ -25,10 +26,11 @@ class Module:
         self.log_inhibition = log_inhibition
         self.log_weights = log_weights
         self.log_noise_amplitude = log_noise_amplitude
-        self.block_threshold = 0.005  # very likely this has to be adjusted by hand
+        self.block_threshold = 0.02  # very likely this has to be adjusted by hand
         self.dendrite_threshold = dendrite_threshold
         self.dendrite_slope = 1/(1 - self.dendrite_threshold)
         self.dendrite_offset = -self.dendrite_slope*self.dendrite_threshold
+        self.WTA = WTA
 
         self.h = np.zeros(size)
         if log_h:
@@ -105,7 +107,7 @@ class Module:
             if self.log_weights:
                 self.weights_log[s_pair] = [np.zeros((input_size, self.size))]
 
-    def step(self, h_input, s_input):
+    def step(self, s_input, learning_rate):
         # update blocked states
         self.block_count = np.where(np.abs(self.s_diff) > self.block_threshold, 3*self.time_constant,
                                     np.maximum(self.block_count - 1, 0))
@@ -119,11 +121,13 @@ class Module:
             self.s_input[s_pair] = self.dendritic_nonlinearty(np.dot(input_values, self.weights[s_pair]))
 
             self.weights[s_pair] += np.where(self.block_count[s_pair], 0,
-                                             self.learning_rate*np.dot(input_values[np.newaxis].transpose(),
+                                             learning_rate*np.dot(input_values[np.newaxis].transpose(),
                                                                         -self.s[s_pair][np.newaxis]))
-            self.weights[s_pair] -= np.where(np.vstack([self.s_input[s_pair] for _ in range(len(input_values))])
-                                             > 1.1*np.dstack([input_values for _ in range(self.size)])[0],
-                                             self.learning_rate, 0)
+            if self.s_pair_weights[s_pair] > 0:
+                self.weights[s_pair] -= np.where(np.vstack([self.s_input[s_pair] for _ in range(len(input_values))])
+                                                 > 1.1*np.dstack([input_values for _ in range(self.size)])[0],
+                                                 learning_rate, 0)
+            self.weights[s_pair] -= self.weights[s_pair]*learning_rate/50
             self.weights[s_pair] = np.where(self.weights[s_pair] < 0, 0, self.weights[s_pair])
 
             if self.log_weights:
@@ -132,16 +136,22 @@ class Module:
             self.s_input[s_pair] = self.dendritic_nonlinearty(np.dot(input_values, self.weights[s_pair]))
 
         # update the activity of neurons
-        self.h += (-self.h + 2*self.h_out - self.inhibition + h_input + np.dot(0.5*self.s_pair_weights, self.s_out)
+        if self.WTA:
+            self.inhibition += (-self.inhibition + np.sum(self.h_out)) / self.fast_time_constant
+            if self.log_inhibition:
+                self.inhibition_log.append(self.log_inhibition)
+            wta = self.h_out - self.inhibition
+        else:
+            wta = 0
+
+        self.h += (-self.h + self.h_out + wta + np.dot(0.5*self.s_pair_weights, self.s_out)
                    - np.dot(self.s_pair_weights, self.sn_out) + self.slow_noise()) / self.time_constant
         if self.log_h:
             self.h_log.append(self.h)
         self.h_out = np.clip(np.tanh(3*self.h), 0, 1)
         if self.log_h_out:
             self.h_out_log.append(self.h_out)
-        self.inhibition += (-self.inhibition + np.sum(self.h_out)) / self.fast_time_constant
-        if self.log_inhibition:
-            self.inhibition_log.append(self.log_inhibition)
+
 
         self.s_diff = -self.s
         self.s += (-self.s - self.h_out + s_input + self.s_input) / self.fast_time_constant
@@ -181,6 +191,7 @@ class Module:
                         ax[axes_indices].set_title("S-Pair " + str(s_pair_num), size='medium')
                     if s_pair_num == 0:
                         ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
+                        ax[axes_indices].set_ylim([-0.2, 1.2])
                     if self.log_h_out:
                         ax[axes_indices].plot(np.array(self.h_out_log)[:, circuit_num], 'b',
                                               label=r"$H_" + str(circuit_num) + "$")
@@ -190,7 +201,7 @@ class Module:
                     if self.log_s_out:
                         ax[axes_indices].plot(np.array(self.s_out_log)[:, s_pair_num, circuit_num], 'g',
                                               label=r"$S_{" + str(circuit_num) + "," + str(s_pair_num) + "}$")
-                    ax[axes_indices].legend(loc='lower right')
+                    ax[axes_indices].legend(loc='lower left')
 
         if self.log_noise_amplitude:
             fig, ax = plt.subplots(self.size, sharex=True)
@@ -231,6 +242,22 @@ class Module:
 
         if show:
             plt.show()
+
+    def plot_image(self, input_image, side_size):
+        reds = colors.LinearSegmentedColormap.from_list('oranges', [(1, 0, 0, 0), (1, 0, 0, 1)], N=100)
+        greens = colors.LinearSegmentedColormap.from_list('oranges', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
+        blues = colors.LinearSegmentedColormap.from_list('oranges', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
+
+        fig, ax = plt.subplots(1, 3)
+        ax[0].matshow(np.array(input_image).reshape((side_size, side_size)), cmap=plt.cm.gray_r)
+
+        ax[1].matshow(np.array(self.h_out[:self.size / 2]).reshape((side_size, side_size)), cmap=blues, vmin=0, vmax=1)
+        ax[1].matshow(np.array(self.s_out[1][:self.size / 2]).reshape((side_size, side_size)), cmap=greens, vmin=0, vmax=1)
+        ax[1].matshow(np.array(self.sn_out[1][:self.size / 2]).reshape((side_size, side_size)), cmap=reds, vmin=0, vmax=1)
+
+        ax[2].matshow(np.array(self.h_out[self.size/2:]).reshape((side_size, side_size)), cmap=blues, vmin=0, vmax=1)
+        ax[2].matshow(np.array(self.s_out[1][self.size / 2:]).reshape((side_size, side_size)), cmap=greens, vmin=0, vmax=1)
+        ax[2].matshow(np.array(self.sn_out[1][self.size / 2:]).reshape((side_size, side_size)), cmap=reds, vmin=0, vmax=1)
 
     def axes_indices(self, circuit_num, s_pair_num, max_s_pairs):
         if max_s_pairs == 1 or self.size == 1:
