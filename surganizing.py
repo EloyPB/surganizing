@@ -5,19 +5,28 @@ import matplotlib.colors as colors
 
 
 class NeuronGroup:
-    def __init__(self, name, size, num_s_pairs=2, s_pair_weights=[1, 0], time_constant=20, noise_max_amplitude=0.15,
-                 dendrite_threshold=0.6, log_h=False, log_h_out=False, log_s=False, log_s_diff=False, log_s_out=False,
+    """Initialization function"""
+    def __init__(self, name, size, num_s_pairs=2, sn_driving_strength=[1, 0], time_constant=20, noise_max_amplitude=0.15,
+                 dendrite_threshold=2/3, s_to_sn_driving_strength=0.5, log_h=False, log_h_out=False, log_s=False, log_s_diff=False, log_s_out=False,
                  log_sn_out=False, log_inhibition=False, log_weights=True, log_noise_amplitude=False):
 
-        self.name = name
-        self.size = size
-        self.num_s_pairs = num_s_pairs
-        self.s_pair_weights = np.array(s_pair_weights)
+        self.name = name  # name of the neuron group
+        self.size = size  # size of the neuron group
+        self.num_s_pairs = num_s_pairs  # number of 'should'/'should-not' pairs
+        # absolute value of the weights from 'should-not' to 'head' neurons
+        self.sn_driving_strength = np.array(sn_driving_strength)
+        # factor multiplying sn_driving_strength to get the weights from 'should' to 'head' neurons
+        self.s_to_sn_driving_strength = s_to_sn_driving_strength
+
         self.time_constant = time_constant
-        self.fast_time_constant = time_constant / 10
+        self.fast_time_constant = time_constant/10
+
+        # parameters for the dendritic nonlinearity
         self.dendrite_threshold = dendrite_threshold
         self.dendrite_slope = 1/(1 - self.dendrite_threshold)
         self.dendrite_offset = -self.dendrite_slope*self.dendrite_threshold
+
+        # these variables indicate which variables are logged
         self.log_h = log_h
         self.log_h_out = log_h_out
         self.log_s = log_s
@@ -28,79 +37,84 @@ class NeuronGroup:
         self.log_weights = log_weights
         self.log_noise_amplitude = log_noise_amplitude
 
+        # 'head' neurons
         self.h = np.zeros(size)
         if log_h:
             self.h_log = [np.zeros(size)]
 
+        # 'head' neurons output after activation function
         self.h_out = np.zeros(size)
         if log_h_out:
             self.h_out_log = [np.zeros(size)]
+        self.h_out_k = 3  # constant for the activation function
 
-        self.block_count = np.zeros((num_s_pairs, size))
-        self.block_threshold = 0.02  # this has to be adjusted by hand
-
+        # input to 'should' neurons
         self.s_input = np.zeros((num_s_pairs, size))
 
+        # 'should' neurons
         self.s = np.zeros((num_s_pairs, size))
         if log_s:
             self.s_log = [np.zeros((num_s_pairs, size))]
 
+        # s(t) - s(t-1), will be used to block learning
         self.s_diff = np.zeros((num_s_pairs, size))
         if log_s_diff:
             self.s_diff_log = [np.zeros((num_s_pairs, size))]
 
+        # 'should' neurons output after clipping between 0 and 1
         self.s_out = np.zeros((num_s_pairs, size))
         if log_s_out:
             self.s_out_log = [np.zeros((num_s_pairs, size))]
 
+        # 'should-not' neurons output. 'should-not' neurons are not calculated explicitly, instead they are
+        # assumed to be the mirror of 'should' neurons
         self.sn_out = np.zeros((num_s_pairs, size))
         if log_sn_out:
             self.sn_out_log = [np.zeros((num_s_pairs, size))]
 
+        # inhibitory neuron that adds up the activity in the group
         self.inhibition = 0
         if log_inhibition:
             self.inhibition_log = [0]
 
-        self.to_s_pairs = []
+        # down counter for blocking learning when s_diff is above block_threshold
+        self.block_count = np.zeros((num_s_pairs, size))
+        self.block_threshold = 0.02  # this has to be adjusted manually if other parameters are modified
+
+        self.to_s_pairs = []  # list of s-pairs that receive input from other neuron groups
+        # list of lists of input neuron groups for each of the s-pairs in to_s_pairs
         self.from_modules = [[] for _ in range(num_s_pairs)]
-        self.weights = [None]*num_s_pairs
+        self.weights = [None]*num_s_pairs  # list of weight matrices for each s-pair
         self.weight_decay_rate = 0
         if log_weights:
             self.weights_log = [None]*num_s_pairs
 
-        self.noise = 0
-        self.noise_target = 0
+        self.noise = np.zeros(size)  # current noise
+        # in order to produce low frequency noise, a noise target is selected every noise_period steps and low-pass
+        # filtered with parameter noise_alpha
+        self.noise_target = np.zeros(size)
         self.noise_step = 0
         self.noise_period = 4*time_constant
         self.noise_alpha = 0.98
+        # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
         self.noise_amplitude = noise_max_amplitude*np.ones(self.size)
+        # noise_amplitude increases constantly with noise_rise_rate saturating at noise_max_amplitude and
+        # decays with noise_fall_rate when h_out is above noise_fall_threshold
         self.noise_max_amplitude = noise_max_amplitude
-        self.noise_rise_rate = 0.0000002
-        self.noise_fall_rate = 0.0002
         if log_noise_amplitude:
             self.noise_amplitude_log = [noise_max_amplitude*np.ones(self.size)]
-
-    def slow_noise(self):
-        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
-                                       - self.noise_fall_rate*(self.h_out>0.5), 0, self.noise_max_amplitude)
-        if self.log_noise_amplitude:
-            self.noise_amplitude_log.append(self.noise_amplitude)
-
-        if self.noise_step < self.noise_period:
-            self.noise_step += 1
-        else:
-            self.noise_step = 0
-            self.noise_target = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.size)
-        self.noise = self.noise_alpha*self.noise + (1-self.noise_alpha)*self.noise_target
-
-        return self.noise
+        self.noise_rise_rate = 0.0000002
+        self.noise_fall_rate = 0.0002
+        self.noise_fall_threshold = 0.5
 
     def enable_connections(self, to_s_pair, from_modules):
+        """Enable connections to s-pair number 'to_s_pair' from neuron groups 'from_modules'"""
         self.to_s_pairs.append(to_s_pair)
         for from_module in from_modules:
             self.from_modules[to_s_pair].append(from_module)
 
     def initialize_weights(self):
+        """Initialize weight matrices. Must be called after enable_connections and before step"""
         for s_pair in self.to_s_pairs:
             input_size = 0
             for module in self.from_modules[s_pair]:
@@ -109,12 +123,35 @@ class NeuronGroup:
             if self.log_weights:
                 self.weights_log[s_pair] = [np.zeros((input_size, self.size))]
 
+    def slow_noise(self):
+        """Produces low frequency noise"""
+        # update noise_amplitude
+        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
+                                       - self.noise_fall_rate*(self.h_out > self.noise_fall_threshold),
+                                       0, self.noise_max_amplitude)
+        if self.log_noise_amplitude:
+            self.noise_amplitude_log.append(self.noise_amplitude)
+
+        # every noise_period steps select a new noise_target in the range [-noise_amplitude, noise_amplitude]
+        if self.noise_step < self.noise_period:
+            self.noise_step += 1
+        else:
+            self.noise_step = 0
+            self.noise_target = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.size)
+
+        # low-pass filter the noise_target
+        self.noise = self.noise_alpha*self.noise + (1 - self.noise_alpha)*self.noise_target
+
+        return self.noise
+
     def step(self, s_input, learning_rate):
-        # update blocked states
+        """Run one step of the simulation"""
+        # update the down counters for blocking learning on 'should' neurons whose activity is changing too fast
+        # in order to block learning during transients
         self.block_count = np.where(np.abs(self.s_diff) > self.block_threshold, 3*self.time_constant,
                                     np.maximum(self.block_count - 1, 0))
 
-        # calculate input to 's' neurons and update weights
+        # calculate inputs to 'should' neurons and update weights
         for s_pair in self.to_s_pairs:
             input_values = []
             for module in self.from_modules[s_pair]:
@@ -124,29 +161,31 @@ class NeuronGroup:
 
             self.weights[s_pair] += np.where(self.block_count[s_pair], 0,
                                              learning_rate*np.dot(input_values[np.newaxis].transpose(),
-                                                                        -self.s[s_pair][np.newaxis]))
-            if self.s_pair_weights[s_pair] > 0:
+                                                                  - self.s[s_pair][np.newaxis]))
+            if self.sn_driving_strength[s_pair] > 0:  # what is going on here?
                 self.weights[s_pair] -= np.where(np.vstack([self.s_input[s_pair] for _ in range(len(input_values))])
                                                  > 1.1*np.dstack([input_values for _ in range(self.size)])[0],
                                                  learning_rate, 0)
-            self.weights[s_pair] -= self.weights[s_pair]*self.weight_decay_rate*learning_rate
-            self.weights[s_pair] = np.where(self.weights[s_pair] < 0, 0, self.weights[s_pair])
+            self.weights[s_pair] -= self.weights[s_pair]*self.weight_decay_rate*learning_rate  # weight decay
+            self.weights[s_pair] = np.where(self.weights[s_pair] < 0, 0, self.weights[s_pair])  # clip weights below 0
 
             if self.log_weights:
                 self.weights_log[s_pair].append(deepcopy(self.weights[s_pair]))
 
-            self.s_input[s_pair] = self.dendritic_nonlinearity(np.dot(input_values, self.weights[s_pair]))
+            self.s_input[s_pair] = self.dendritic_nonlinearity(np.dot(input_values, self.weights[s_pair]))  # why twice?
 
-        # update the activity of neurons
+        # update the activity of inhibitory neuron
         self.inhibition += (-self.inhibition + np.sum(self.h_out)) / self.fast_time_constant
         if self.log_inhibition:
             self.inhibition_log.append(self.log_inhibition)
 
-        self.h += (-self.h + 2*self.h_out - self.inhibition + np.dot(0.5*self.s_pair_weights, self.s_out)  # make this parameter explicit
-                   - np.dot(self.s_pair_weights, self.sn_out) + self.slow_noise()) / self.time_constant
+        # update activity of 'head' neuron
+        self.h += (-self.h + 2*self.h_out - self.inhibition + self.slow_noise() +
+                   np.dot(self.s_to_sn_driving_strength*self.sn_driving_strength, self.s_out)
+                   - np.dot(self.sn_driving_strength, self.sn_out)) / self.time_constant
         if self.log_h:
             self.h_log.append(self.h)
-        self.h_out = np.clip(np.tanh(3*self.h), 0, 1)  # make this parameter explicit
+        self.h_out = np.clip(np.tanh(self.h_out_k*self.h), 0, 1)
         if self.log_h_out:
             self.h_out_log.append(self.h_out)
 
@@ -257,7 +296,7 @@ class FeatureMaps:
         self.height = 0
         self.width = 0
 
-    def build_initial(self, height, width, num_features, num_s_pairs=2, s_pair_weights=[1, 0], time_constant=20,
+    def build_initial(self, height, width, num_features, num_s_pairs=2, sn_driving_strength=[1, 0], time_constant=20,
                       noise_max_amplitude=0.15, dendrite_threshold=0.6, log_h=False, log_h_out=True, log_s=False,
                       log_s_diff=False, log_s_out=True, log_sn_out=True, log_inhibition=False, log_weights=True,
                       log_noise_amplitude=False):
@@ -268,14 +307,14 @@ class FeatureMaps:
         for row_num in range(height):
             for col_num in range(width):
                 group_name = self.name + " " + str(row_num) + "," + str(col_num)
-                self.neuron_groups[row_num][col_num] = NeuronGroup(group_name, num_features, num_s_pairs, s_pair_weights,
+                self.neuron_groups[row_num][col_num] = NeuronGroup(group_name, num_features, num_s_pairs, sn_driving_strength,
                                                                    time_constant, noise_max_amplitude,
                                                                    dendrite_threshold, log_h, log_h_out,
                                                                    log_s, log_s_diff, log_s_out, log_sn_out,
                                                                    log_inhibition, log_weights, log_noise_amplitude)
 
     def build_on_top(self, input_feature_maps, kernel_height, kernel_width, stride, num_features, num_s_pairs=2,
-                     s_pair_weights=[1, 0], time_constant=20, noise_max_amplitude=0.15, dendrite_threshold=0.6,
+                     sn_driving_strength=[1, 0], time_constant=20, noise_max_amplitude=0.15, dendrite_threshold=0.6,
                      log_h=False, log_h_out=True, log_s=False, log_s_diff=False, log_s_out=True, log_sn_out=True,
                      log_inhibition=False, log_weights=True, log_noise_amplitude=False):
 
@@ -288,7 +327,7 @@ class FeatureMaps:
             new_row = []
             while x <= input_feature_maps.width - kernel_width:
                 group_name = self.name + " " + str(row_num_out) + "," + str(col_num_out)
-                new_group = NeuronGroup(group_name, num_features, num_s_pairs, s_pair_weights, time_constant,
+                new_group = NeuronGroup(group_name, num_features, num_s_pairs, sn_driving_strength, time_constant,
                                         noise_max_amplitude, dendrite_threshold, log_h, log_h_out, log_s, log_s_diff,
                                         log_s_out, log_sn_out, log_inhibition, log_weights, log_noise_amplitude)
                 new_row.append(new_group)
