@@ -172,8 +172,6 @@ class NeuronGroup:
             if self.log_weights:
                 self.weights_log[s_pair].append(deepcopy(self.weights[s_pair]))
 
-            self.s_input[s_pair] = self.dendritic_nonlinearity(np.dot(input_values, self.weights[s_pair]))  # why twice?
-
         # update the activity of inhibitory neuron
         self.inhibition += (-self.inhibition + np.sum(self.h_out)) / self.fast_time_constant
         if self.log_inhibition:
