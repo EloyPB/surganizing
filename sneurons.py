@@ -1,3 +1,5 @@
+## I was going to start doing a version with multidimensional arrays of circuits
+
 import numpy as np
 from copy import deepcopy
 import matplotlib.pyplot as plt
@@ -50,5 +52,5 @@ class SNeurons:
             self.step()
 
     def plot(self):
-        plt.plot(np.array(self.head_out_log)[:,0,0], '*-')
+        plt.plot(np.array(self.head_out_log)[:, 0, 0], '*-')
         plt.show()
