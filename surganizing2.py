@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 
 class Network:
     def __init__(self, time_constant=20, error_pairs=2, pos_error_to_head=(2, 0), neg_error_to_head=(0.3, 0),
-                 dendrite_threshold=2/3, log_head=False, log_head_out=True, log_pos_error=False, log_pos_error_out=True,
-                 log_neg_error_out=True):
+                 dendrite_threshold=2/3, noise_max_amplitude=0.15, log_head=False, log_head_out=True,
+                 log_pos_error=False, log_pos_error_out=True, log_neg_error_out=True, log_noise_amplitude=True):
         self.groups = {}
         self.names = []
         self.num_circuits = 0
@@ -37,6 +37,19 @@ class Network:
         self.neg_error_out = None
         self.log_neg_error_out = log_neg_error_out
         if log_neg_error_out: self.neg_error_out_log = None
+        self.noise_max_amplitude = noise_max_amplitude
+        self.noise_amplitude = None
+        self.log_noise_amplitude = log_noise_amplitude
+        if self.log_noise_amplitude: self.noise_amplitude_log = None
+        self.noise_period = 4*time_constant
+        self.noise_step_num = 0
+        self.noise_previous = None
+        self.noise = None
+        self.noise_next = None
+        self.wta_weights = None
+        self.wta_sum = None
+        self.weights = None
+        self.weights_mask = None
 
     def add_group(self, name, num_circuits):
         start = self.num_circuits
@@ -44,11 +57,20 @@ class Network:
         end = self.num_circuits
         self.groups[name] = (start, end)
 
-    def initialize_activities(self):
-        self.names = [None]*self.num_circuits
-        for group_name, indices in self.groups.items():
+    def initialize(self):
+        # Initialize a list of names and a matrix for the winner take all
+        self.names = [None] * self.num_circuits
+        self.wta_sum = np.zeros(len(self.groups))
+        self.wta_weights = np.zeros((self.num_circuits, len(self.groups)))
+        for group_num, (group_name, indices) in enumerate(self.groups.items()):
+            self.wta_weights[indices[0]:indices[1], group_num] = 1
             for rel_index, abs_index in enumerate(range(indices[0], indices[1])):
                 self.names[abs_index] = r'$' + group_name + '_' + str(rel_index)
+
+        # Initialize weights
+        self.weights = np.ma.masked_array(np.zeros((self.num_circuits, self.num_circuits)), self.weights_mask)
+
+        # Initialize activities
         self.head = np.zeros(self.num_circuits)
         if self.log_head: self.head_log = [self.head]
         self.head_out = np.zeros(self.num_circuits)
@@ -59,15 +81,35 @@ class Network:
         if self.log_pos_error_out: self.pos_error_out_log = [self.pos_error_out]
         self.neg_error_out = np.zeros((self.error_pairs, self.num_circuits))
         if self.log_neg_error_out: self.neg_error_out_log = [self.neg_error_out]
-        print(self.names)
+
+        # Initialize noise variables
+        self.noise_amplitude = np.ones(self.num_circuits)*self.noise_max_amplitude
+        if self.log_noise_amplitude: self.noise_amplitude_log = [self.noise_amplitude]
+        self.noise_previous = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+        self.noise = np.zeros(self.num_circuits)
+        self.noise_next = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
 
     def dendrite_nonlinearity(self, input_values):
         return np.where(input_values < self.dendrite_threshold, 0, input_values*self.dendrite_slope
                         + self.dendrite_offset)
+
+    def slow_noise(self):
+        alpha = self.noise_step_num / self.noise_period
+        self.noise = (1-alpha)*self.noise_previous + alpha*self.noise_next
+        self.noise_step_num += 1
+
+        if self.noise_step_num == self.noise_period:
+            self.noise_previous = self.noise_next
+            self.noise_next = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+            self.noise_step_num = 0
+
+        return self.noise
         
     def step(self, external_input):
-        self.head += (-self.head + self.head_out - np.dot(self.pos_error_to_head, self.pos_error_out)
-                      + np.dot(self.neg_error_to_head, self.neg_error_out)) / self.time_constant
+        self.wta_sum += (-self.wta_sum + np.dot(self.head_out, self.wta_weights)) / self.fast_time_constant
+        self.head += (-self.head + 2*self.head_out - np.dot(self.pos_error_to_head, self.pos_error_out)
+                      + np.dot(self.neg_error_to_head, self.neg_error_out)
+                      - np.dot(self.wta_sum, self.wta_weights.T) + self.slow_noise()) / self.time_constant
         if self.log_head: self.head_log.append(self.head)
 
         self.head_out = np.clip(np.tanh(self.k*self.head), 0, 1)
