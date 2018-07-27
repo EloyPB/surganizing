@@ -1,12 +1,12 @@
 import numpy as np
-from copy import deepcopy
 import matplotlib.pyplot as plt
 
 
 class Network:
     def __init__(self, time_constant=20, error_pairs=2, pos_error_to_head=(2, 0), neg_error_to_head=(0.3, 0),
                  learning_rate=0.01, dendrite_threshold=2/3, noise_max_amplitude=0.15, log_head=False, log_head_out=True,
-                 log_neg_error=False, log_neg_error_out=True, log_pos_error_out=True, log_noise_amplitude=True):
+                 log_neg_error=False, log_neg_error_out=True, log_pos_error_out=True, log_noise_amplitude=False,
+                 log_weights=True):
         self.groups = {}
         self.names = []
         self.num_circuits = 0
@@ -41,7 +41,7 @@ class Network:
         self.noise_max_amplitude = noise_max_amplitude
         self.noise_amplitude = None
         self.log_noise_amplitude = log_noise_amplitude
-        if self.log_noise_amplitude: self.noise_amplitude_log = None
+        if log_noise_amplitude: self.noise_amplitude_log = None
         self.noise_period = 4*time_constant
         self.noise_step_num = 0
         self.noise_previous = None
@@ -50,6 +50,8 @@ class Network:
         self.wta_weights = None
         self.wta_sum = None
         self.weights = None
+        self.log_weights = log_weights
+        if log_weights: self.weights_log = None
         self.weights_mask = None
 
     def add_group(self, name, num_circuits):
@@ -92,6 +94,7 @@ class Network:
         # Initialize weights
         self.weights = np.ma.masked_array(np.zeros((self.error_pairs, self.num_circuits, self.num_circuits)),
                                           self.weights_mask)
+        if self.log_weights: self.weights_log = [self.weights]
 
         # Initialize noise variables
         self.noise_amplitude = np.ones(self.num_circuits)*self.noise_max_amplitude
@@ -118,17 +121,17 @@ class Network:
         
     def step(self, external_input):
         self.wta_sum += (-self.wta_sum + np.dot(self.head_out, self.wta_weights)) / self.fast_time_constant
-        self.head += (-self.head + 2*self.head_out - np.dot(self.pos_error_to_head, self.pos_error_out)
-                      + np.dot(self.neg_error_to_head, self.neg_error_out)
-                      - np.dot(self.wta_sum, self.wta_weights.T) + self.slow_noise()) / self.time_constant
+        self.head = (self.head + (-self.head + 2*self.head_out - np.dot(self.pos_error_to_head, self.pos_error_out)
+                                  + np.dot(self.neg_error_to_head, self.neg_error_out)
+                                  - np.dot(self.wta_sum, self.wta_weights.T) + self.slow_noise()) / self.time_constant)
         if self.log_head: self.head_log.append(self.head)
 
         self.head_out = np.clip(np.tanh(self.k*self.head), 0, 1)
         if self.log_head_out: self.head_out_log.append(self.head_out)
 
-        self.neg_error += ((-self.neg_error - self.head_out + external_input
-                            + self.dendrite_nonlinearity(np.ma.inner(self.head_out, self.weights)))
-                           / self.fast_time_constant)
+        self.neg_error = (self.neg_error + (-self.neg_error - self.head_out + external_input
+                                            + self.dendrite_nonlinearity(np.ma.inner(self.head_out, self.weights)))
+                          / self.fast_time_constant)
         if self.log_neg_error: self.neg_error_log.append(self.neg_error)
 
         self.neg_error_out = np.clip(self.neg_error, 0, 1)
@@ -137,13 +140,17 @@ class Network:
         if self.log_pos_error_out: self.pos_error_out_log.append(self.pos_error_out)
 
         # Update weights
-        self.weights -= self.learning_rate*np.ma.inner(self.neg_error[:, :, np.newaxis], self.head_out[:, np.newaxis])
+        self.weights = np.clip(self.weights - self.learning_rate*np.ma.inner(self.neg_error[:, :, np.newaxis],
+                                                                             self.head_out[:, np.newaxis]),
+                               a_min=0, a_max=None)
+        if self.log_weights: self.weights_log.append(self.weights)
 
     def run(self, num_steps, external_input):
         for step_num in range(num_steps):
             self.step(external_input)
 
     def plot_traces(self):
+        print('plotting...')
         fig, ax = plt.subplots(self.num_circuits, self.error_pairs, sharex=True, sharey=True)
         for error_pair_num in range(self.error_pairs):
             for circuit_num in range(self.num_circuits):
@@ -155,12 +162,23 @@ class Network:
                                                          label=self.names[circuit_num] + ' h$')
                 if self.log_neg_error:
                     ax[circuit_num, error_pair_num].plot(np.array(self.neg_error_log)[:, error_pair_num, circuit_num],
-                                                         'greenyellow', label=self.names[circuit_num] + ' n_i$')
-                if self.log_pos_error_out:
-                    ax[circuit_num, error_pair_num].plot(np.array(self.pos_error_out_log)[:, error_pair_num, circuit_num],
-                                                         'r', label=self.names[circuit_num] + ' p$')
+                                                         'limegreen', label=self.names[circuit_num] + ' n_i$')
                 if self.log_neg_error_out:
                     ax[circuit_num, error_pair_num].plot(np.array(self.neg_error_out_log)[:, error_pair_num, circuit_num],
                                                          'g', label=self.names[circuit_num] + ' n$')
+                if self.log_pos_error_out:
+                    ax[circuit_num, error_pair_num].plot(np.array(self.pos_error_out_log)[:, error_pair_num, circuit_num],
+                                                         'r', label=self.names[circuit_num] + ' p$')
                 ax[circuit_num, error_pair_num].legend()
+
+        if self.log_weights:
+            fig_w, ax_w = plt.subplots(self.num_circuits, self.error_pairs)
+            for error_pair_num in range(self.error_pairs):
+                for circuit_num in range(self.num_circuits):
+                    for input_num in range(self.num_circuits):
+                        if not self.weights_mask[error_pair_num, circuit_num, input_num]:
+                            ax_w[circuit_num, error_pair_num].plot(np.array(self.weights_log)
+                                                                   [:, error_pair_num, circuit_num, input_num])
+                            ax_w[circuit_num, error_pair_num].set_ylim([-0.2, 1.2])
+
         plt.show()
