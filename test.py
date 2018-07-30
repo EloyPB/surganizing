@@ -9,7 +9,7 @@ max_noise_amplitude = 0.15
 
 log_amplitudes = True
 log_noise_amplitude = False
-log_weights = False
+log_weights = True
 log_s_diff = False
 
 A = NeuronGroup("A", sizes[0], s_pairs[0], s_pair_weights[0], time_constant, max_noise_amplitude,
