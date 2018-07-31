@@ -1,6 +1,6 @@
 import numpy as np
-from surganizing import FeatureMaps
-from surganizing import ConvNet
+from surganizing1 import FeatureMaps
+from surganizing1 import ConvNet
 
 learning_rate = 0.001
 
