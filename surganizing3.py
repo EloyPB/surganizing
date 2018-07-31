@@ -1,15 +1,15 @@
 # EVERYTHING IN ONE SINGLE ARRAY
-# TRIANGULAR NOISE
+# NOISE AS IN THE FIRST IMPLEMENTATION
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 class Network:
-    def __init__(self, time_constant=20, error_pairs=2, normalize_weights=(0,), pos_error_to_head=(2, 0), neg_error_to_head=(0.3, 0),
-                 learning_rate=0.01, dendrite_threshold=2/3, noise_max_amplitude=0.3, noise_rise_rate=0.0000002,
+    def __init__(self, time_constant=20, error_pairs=2, normalize_weights=(0,), pos_error_to_head=(1.2, 0), neg_error_to_head=(0.6, 0),
+                 learning_rate=0.01, dendrite_threshold=2/3, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
                  noise_fall_rate=0.0002, noise_fall_threshold=0.5, block_threshold=0.02, log_head=False, log_head_out=True,
-                 log_neg_error=False, log_neg_error_diff=True, log_neg_error_out=True, log_pos_error_out=True, log_noise_amplitude=False,
+                 log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True, log_noise_amplitude=False,
                  log_weights=True):
         self.groups = {}
         self.group_sizes = []
@@ -54,11 +54,11 @@ class Network:
         self.noise_amplitude = None
         self.log_noise_amplitude = log_noise_amplitude
         if log_noise_amplitude: self.noise_amplitude_log = None
-        self.noise_period = 15*time_constant
+        self.noise_period = 4*time_constant
+        self.noise_alpha = 0.98
         self.noise_step_num = 0
-        self.noise_previous = None
         self.noise = None
-        self.noise_next = None
+        self.noise_target = None
         self.noise_rise_rate = noise_rise_rate
         self.noise_fall_rate = noise_fall_rate
         self.noise_fall_threshold = noise_fall_threshold
@@ -120,15 +120,15 @@ class Network:
         # Initialize noise variables
         self.noise_amplitude = np.ones(self.num_circuits)*self.noise_max_amplitude
         if self.log_noise_amplitude: self.noise_amplitude_log = [self.noise_amplitude]
-        self.noise_previous = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
         self.noise = np.zeros(self.num_circuits)
-        self.noise_next = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+        self.noise_target = np.zeros(self.num_circuits)
 
     def dendrite_nonlinearity(self, input_values):
         return np.where(input_values < self.dendrite_threshold, 0, input_values*self.dendrite_slope
                         + self.dendrite_offset)
 
     def slow_noise(self):
+        """Produces low frequency noise"""
         # update noise_amplitude
         self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
                                        - self.noise_fall_rate*(self.head_out > self.noise_fall_threshold),
@@ -136,14 +136,15 @@ class Network:
         if self.log_noise_amplitude:
             self.noise_amplitude_log.append(self.noise_amplitude)
 
-        alpha = self.noise_step_num / self.noise_period
-        self.noise = (1-alpha)*self.noise_previous + alpha*self.noise_next
-        self.noise_step_num += 1
-
-        if self.noise_step_num == self.noise_period:
-            self.noise_previous = self.noise_next
-            self.noise_next = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+        # every noise_period steps select a new noise_target in the range [-noise_amplitude, noise_amplitude]
+        if self.noise_step_num < self.noise_period:
+            self.noise_step_num += 1
+        else:
             self.noise_step_num = 0
+            self.noise_target = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+
+        # low-pass filter the noise_target
+        self.noise = self.noise_alpha*self.noise + (1 - self.noise_alpha)*self.noise_target
 
         return self.noise
         
@@ -249,5 +250,6 @@ class Network:
             for error_pair_num in range(self.error_pairs):
                 for circuit_num in range(self.num_circuits):
                     ax_d[circuit_num, error_pair_num].plot(np.array(self.neg_error_diff_log)[:, error_pair_num, circuit_num], label=r'$' + self.names[circuit_num] + '.n_diff$')
-
+                    ax_d[circuit_num, error_pair_num].axhline(self.block_threshold, linestyle=':', color='k')
+                    ax_d[circuit_num, error_pair_num].axhline(-self.block_threshold, linestyle=':', color='gray')
         plt.show()

@@ -1,5 +1,7 @@
-from surganizing import NeuronGroup
+import time
 import numpy as np
+from surganizing import NeuronGroup
+
 
 sizes = [4, 4]
 s_pairs = [2, 1]
@@ -28,6 +30,7 @@ B.initialize_weights()
 modules = [A, B]
 s_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(s_pairs, sizes)]
 
+start_time = time.time()
 for input_num in range(2*sizes[0]):
     input_num = input_num%sizes[0]
     s_input[0][0, input_num] = 1
@@ -39,7 +42,7 @@ for input_num in range(2*sizes[0]):
         for module_num, module in enumerate(modules):
             module.step(s_input[module_num], learning_rate=0.01)
 
-
+print(time.time() - start_time)
 print("plotting...")
 
 for module in modules:

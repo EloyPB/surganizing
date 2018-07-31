@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from surganizing2 import Network
+from surganizing3 import Network
 
 
 net = Network()
