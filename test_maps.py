@@ -2,7 +2,7 @@ import numpy as np
 from surganizing1 import FeatureMaps
 from surganizing1 import ConvNet
 
-learning_rate = 0.001
+learning_rate = 0.005
 
 first_map = FeatureMaps("first")
 first_map.build_initial(height=4, width=4, num_features=2)

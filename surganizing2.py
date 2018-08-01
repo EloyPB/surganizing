@@ -1,5 +1,6 @@
 # EVERYTHING IN ONE SINGLE ARRAY
 # TRIANGULAR NOISE
+# ~6 TIMES SLOWER THAN 1 :(
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,7 +30,7 @@ class Network:
         self.dendrite_slope = 1/(1 - self.dendrite_threshold)
         self.dendrite_offset = -self.dendrite_slope*self.dendrite_threshold
 
-        # down counter for blocking learning when s_diff is above block_threshold
+        # down counter for blocking learning when neg_error_diff is above block_threshold
         self.block_count = None
         self.block_threshold = block_threshold
 
