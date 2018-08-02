@@ -1,18 +1,17 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from copy import deepcopy
-import matplotlib.colors as colors
 
 
 class NeuronGroup:
     """Initialization function"""
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
-                 normalize_weights=(0,), time_constant=20, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
+                 normalize_weights=(0,), time_constant=20, learning_rate=0.01, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
                  noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02, 
-                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
-                 log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
+                 log_head=True, log_head_out=True, log_neg_error=True, log_neg_error_diff=True, log_neg_error_out=True,
+                 log_pos_error_out=True, log_weights=True, log_noise_amplitude=True):
 
         self.name = name  # name of the neuron group
+        self.names = [name[0] + '_' + str(circuit_num) for circuit_num in range(num_circuits)]
         self.num_circuits = num_circuits  # number of mismatch detection circuits in the neuron group
         self.num_error_pairs = num_error_pairs
         self.pos_error_to_head = pos_error_to_head
@@ -20,6 +19,8 @@ class NeuronGroup:
         self.normalize_weights = normalize_weights
         self.time_constant = time_constant
         self.fast_time_constant = time_constant/10
+        self.default_learning_rate = learning_rate
+        self.learning_rate = learning_rate
 
         # parameters for the dendritic nonlinearity
         self.dendrite_threshold = dendrite_threshold
@@ -53,7 +54,7 @@ class NeuronGroup:
         # negative error neurons
         self.neg_error = np.zeros((num_error_pairs, num_circuits))
         if log_neg_error:
-            self.s_log = [np.zeros((num_error_pairs, num_circuits))]
+            self.neg_error_log = [np.zeros((num_error_pairs, num_circuits))]
 
         # neg_error(t) - neg_error(t-1), will be used to freeze learning during transients
         self.neg_error_diff = np.zeros((num_error_pairs, num_circuits))
@@ -81,6 +82,7 @@ class NeuronGroup:
         self.target_error_pairs = []  # list of error pairs that receive input from other neuron groups
         # list of lists of input neuron groups for each of the error pairs in target_error_pairs
         self.input_groups = [[] for _ in range(num_error_pairs)]
+        self.input_names = [None]*num_error_pairs
         self.weights = [None]*num_error_pairs  # list of weight matrices for each error pair
         self.ones = None
         if log_weights:
@@ -115,11 +117,15 @@ class NeuronGroup:
         """Initialize weight matrices. Must be called after enable_connections and before step!"""
         for error_pair in self.target_error_pairs:
             input_size = 0
+            input_names = []
             for input_group in self.input_groups[error_pair]:
                 input_size += input_group.num_circuits
+                for circuit_name in input_group.names:
+                    input_names.append(circuit_name)
             self.weights[error_pair] = np.zeros((input_size, self.num_circuits))
             if self.log_weights:
                 self.weights_log[error_pair] = [np.zeros((input_size, self.num_circuits))]
+            self.input_names[error_pair] = input_names
             self.ones = np.ones((input_size, 1))
 
     def slow_noise(self):
@@ -146,7 +152,13 @@ class NeuronGroup:
         return np.where(input_values < self.dendrite_threshold, 0, input_values*self.dendrite_slope
                         + self.dendrite_offset)
 
-    def step(self, neg_error_input, learning_rate):
+    def learning_off(self):
+        self.learning_rate = 0
+
+    def learning_on(self, learning_rate=False):
+        self.learning_rate = learning_rate if learning_rate else self.default_learning_rate
+
+    def step(self, external_input=None):
         """Run one step of the simulation"""
         # update the down counters for freezing weights on neg_error neurons whose activity is changing fast
         # in order to block learning during transients
@@ -161,12 +173,13 @@ class NeuronGroup:
 
             self.neg_error_input[error_pair] = self.dendrite_nonlinearity(np.dot(input_values, self.weights[error_pair]))
 
-            weight_update = np.where(self.freeze_count[error_pair], 0, np.dot(input_values[:, np.newaxis],
-                                                                              - self.neg_error[error_pair][np.newaxis]))
-            if error_pair in self.normalize_weights:
-                weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
+            if self.learning_rate:
+                weight_update = np.where(self.freeze_count[error_pair], 0, np.dot(input_values[:, np.newaxis],
+                                                                                  - self.neg_error[error_pair][np.newaxis]))
+                if error_pair in self.normalize_weights:
+                    weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
 
-            self.weights[error_pair] = np.clip(self.weights[error_pair] + learning_rate*weight_update, a_min=0, a_max=None)  # clip weights below 0
+                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate*weight_update, a_min=0, a_max=None)  # clip weights below 0
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
@@ -175,7 +188,7 @@ class NeuronGroup:
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.fast_time_constant
 
         # update activity of head neuron
-        self.head += (-self.head + 2*self.head_out - self.inhibition + self.slow_noise() +
+        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise() +
                       np.dot(self.neg_error_to_head, self.neg_error_out)
                       - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
@@ -185,15 +198,15 @@ class NeuronGroup:
             self.head_out_log.append(self.head_out)
 
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
-        if neg_error_input is not None:  # remove this
-            neg_error_update += neg_error_input
+        if external_input is not None:
+            neg_error_update += external_input
         self.neg_error_diff = -self.neg_error
-        self.neg_error += neg_error_update / self.fast_time_constant
+        self.neg_error = self.neg_error + neg_error_update / self.fast_time_constant
         self.neg_error_diff += self.neg_error
         if self.log_neg_error_diff:
             self.neg_error_diff_log.append(self.neg_error_diff)
         if self.log_neg_error:
-            self.s_log.append(self.neg_error)
+            self.neg_error_log.append(self.neg_error)
         self.neg_error_out = np.clip(self.neg_error, 0, 1)
         if self.log_neg_error_out:
             self.neg_error_out_log.append(self.neg_error_out)
@@ -203,80 +216,88 @@ class NeuronGroup:
 
     # PLOTTING FUNCTIONS
 
-    def plot_heads(self):
-        fig, ax = plt.subplots()
-        for head_num in range(self.num_circuits):
-            ax.plot(np.array(self.head_out_log)[:, head_num], label=str(head_num))
-        plt.legend()
-        plt.show()
+    def plot_circuits(self, show=False):
 
-    def plot_circuits(self, show):
-        if self.log_head_out or self.log_neg_error_out or self.log_pos_error_out:
-            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True)
+        x_label = 'Simulation Steps'
+
+        def get_axes_indices(row, column, num_columns):
+            if num_columns == 1 or self.num_circuits == 1:
+                return max(row, column)
+            else:
+                return row, column
+
+        if self.log_head or self.log_head_out or self.log_neg_error or self.log_neg_error_out or self.log_pos_error_out:
+            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True, num=self.name + ' Act')
             fig.suptitle("Neural Circuits in Module " + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 for error_pair_num in range(self.num_error_pairs):
-                    axes_indices = self.axes_indices(circuit_num, error_pair_num, self.num_error_pairs)
+                    axes = ax[get_axes_indices(circuit_num, error_pair_num, self.num_error_pairs)]
                     if circuit_num == 0:
-                        ax[axes_indices].set_title("S-Pair " + str(error_pair_num), size='medium')
+                        axes.set_title("Error Pair " + str(error_pair_num), size='medium')
+                    if circuit_num == self.num_circuits-1:
+                        axes.set_xlabel(x_label)
                     if error_pair_num == 0:
-                        ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
-                        ax[axes_indices].set_ylim([-0.2, 1.2])
+                        axes.set_ylabel("Circuit " + str(circuit_num))
+                        axes.set_ylim([-0.2, 1.2])
+                    if self.log_head:
+                        axes.plot(np.array(self.head_log)[:, circuit_num], 'b:', label=r'$' + self.names[circuit_num] + '.h^i$')
                     if self.log_head_out:
-                        ax[axes_indices].plot(np.array(self.head_out_log)[:, circuit_num], 'b',
-                                              label=r"$H_" + str(circuit_num) + "$")
-                    if self.log_pos_error_out:
-                        ax[axes_indices].plot(np.array(self.pos_error_out_log)[:, error_pair_num, circuit_num], 'r',
-                                              label=r"$N_{" + str(circuit_num) + "," + str(error_pair_num) + "}$")
+                        axes.plot(np.array(self.head_out_log)[:, circuit_num], 'b', label=r'$' + self.names[circuit_num] + '.h$')
+                    if self.log_neg_error:
+                        axes.plot(np.array(self.neg_error_log)[:, error_pair_num, circuit_num], 'g:',
+                                              label=r'$' + self.names[circuit_num] + '.n^i_' + str(error_pair_num) + '$')
                     if self.log_neg_error_out:
-                        ax[axes_indices].plot(np.array(self.neg_error_out_log)[:, error_pair_num, circuit_num], 'g',
-                                              label=r"$S_{" + str(circuit_num) + "," + str(error_pair_num) + "}$")
-                    ax[axes_indices].legend(loc='lower left')
+                        axes.plot(np.array(self.neg_error_out_log)[:, error_pair_num, circuit_num], 'g',
+                                                  label=r'$' + self.names[circuit_num] + '.n_' + str(error_pair_num) + '$')
+                    if self.log_pos_error_out:
+                        axes.plot(np.array(self.pos_error_out_log)[:, error_pair_num, circuit_num], 'r',
+                                              label=r'$' + self.names[circuit_num] + '.p_' + str(error_pair_num) + '$')
+                    axes.legend(loc='lower left')
 
         if self.log_noise_amplitude:
-            fig, ax = plt.subplots(self.num_circuits, sharex=True)
+            fig, ax = plt.subplots(self.num_circuits, sharex=True, num=self.name + ' Noise')
             fig.suptitle("Noise Amplitude in Module " + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 ax[circuit_num].plot(np.array(self.noise_amplitude_log)[:, circuit_num])
                 ax[circuit_num].set_ylabel("Circuit " + str(circuit_num))
+            ax[-1].set_xlabel(x_label)
 
         if self.log_neg_error_diff:
-            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True)
-            fig.suptitle("S(t) - S(t-1) in Module" + self.name, size='large')
+            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True, num=self.name + ' Diff')
+            fig.suptitle("N(t) - N(t-1) in Module" + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 for error_pair_num in range(self.num_error_pairs):
-                    axes_indices = self.axes_indices(circuit_num, error_pair_num, self.num_error_pairs)
+                    axes = ax[get_axes_indices(circuit_num, error_pair_num, self.num_error_pairs)]
                     if circuit_num == 0:
-                        ax[axes_indices].set_title("S-Pair " + str(error_pair_num), size='medium')
+                        axes.set_title("Error Pair " + str(error_pair_num), size='medium')
+                    if circuit_num == self.num_circuits-1:
+                        axes.set_xlabel(x_label)
                     if error_pair_num == 0:
-                        ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
-                    ax[axes_indices].plot(np.array(self.neg_error_diff_log)[:, error_pair_num, circuit_num], 'r',
-                                          label=r"$S_{diff," + str(circuit_num) + "," + str(error_pair_num) + "}$")
-                    ax[axes_indices].legend(loc='lower right')
+                        axes.set_ylabel("Circuit " + str(circuit_num))
+                    axes.plot(np.array(self.neg_error_diff_log)[:, error_pair_num, circuit_num], 'r')
+                    axes.axhline(self.freeze_threshold, linestyle=':', color='gray')
+                    axes.axhline(-self.freeze_threshold, linestyle=':', color='gray')
 
         if self.log_weights:
-            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex=True, sharey=True)
-            fig.suptitle("Incoming Weights in Module " + self.name, size='large')
-            for error_pair_num, s_pair in enumerate(self.target_error_pairs):
-                input_num_circuits = self.weights[s_pair].shape[0]
+            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex=True, sharey=True, num=self.name + ' W')
+            fig.suptitle("Incoming Weights into Module " + self.name, size='large')
+            for error_pair_num, error_pair in enumerate(self.target_error_pairs):
+                num_input_circuits = self.weights[error_pair].shape[0]
                 for circuit_num in range(self.num_circuits):
-                    axes_indices = self.axes_indices(circuit_num, error_pair_num, len(self.target_error_pairs))
+                    axes_indices = get_axes_indices(circuit_num, error_pair_num, len(self.target_error_pairs))
                     if circuit_num == 0:
-                        ax[axes_indices].set_title("S-Pair " + str(s_pair), size='medium')
+                        ax[axes_indices].set_title("Error Pair " + str(error_pair), size='medium')
+                    if circuit_num == self.num_circuits - 1:
+                        ax[axes_indices].set_xlabel(x_label)
                     if error_pair_num == 0:
                         ax[axes_indices].set_ylabel("Circuit " + str(circuit_num))
-                    for input_num in range(input_num_circuits):
-                        ax[axes_indices].plot(np.array(self.weights_log[s_pair])[:, input_num, circuit_num],
-                                              label=r"$W_{H_" + str(input_num) +r"\rightarrow S_" + str(circuit_num) + "}$")
+                    for input_num in range(num_input_circuits):
+                        label = r'$W_{' + self.input_names[error_pair][input_num] + r'.h\rightarrow ' + self.names[circuit_num] + '.n_' + str(error_pair) + '}$'
+                        ax[axes_indices].plot(np.array(self.weights_log[error_pair])[:, input_num, circuit_num], label=label)
                     ax[axes_indices].legend(loc='lower right')
 
         if show:
             plt.show()
 
-    def axes_indices(self, circuit_num, s_pair_num, max_error_pairs):
-        if max_error_pairs == 1 or self.num_circuits == 1:
-            return max(circuit_num, s_pair_num)
-        else:
-            return circuit_num, s_pair_num
 
 

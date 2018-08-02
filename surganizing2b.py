@@ -28,7 +28,7 @@ class Network:
         self.dendrite_slope = 1/(1 - self.dendrite_threshold)
         self.dendrite_offset = -self.dendrite_slope*self.dendrite_threshold
 
-        # down counter for blocking learning when neg_error_diff is above block_threshold
+        # down counter for blocking learning when s_diff is above block_threshold
         self.block_count = None
         self.block_threshold = block_threshold
 
@@ -220,7 +220,7 @@ class Network:
                     for input_num in range(self.num_circuits):
                         if not self.weights_mask[error_pair_num, circuit_num, input_num]:
                             label = r'$w_{' + self.names[input_num] + r'.h\rightarrow ' + self.names[circuit_num] \
-                                    + '.p}$'
+                                    + '.n}$'
                             ax_w[circuit_num, error_pair_num].plot(np.array(self.weights_log)
                                                                    [:, error_pair_num, circuit_num, input_num],
                                                                    label=label)
