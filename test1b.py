@@ -24,10 +24,10 @@ B = NeuronGroup(name="B", num_circuits=sizes[1], num_error_pairs=s_pairs[1], pos
                 neg_error_to_head=neg_error_to_head[1], normalize_weights=normalize_weights[1],
                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
-A.enable_connections(target_error_pair=1, input_groups=[B])
+A.enable_connections(input_groups=[B], target_error_pair=1)
 A.initialize_weights()
 
-B.enable_connections(target_error_pair=0, input_groups=[A])
+B.enable_connections(input_groups=[A], target_error_pair=0)
 B.initialize_weights()
 
 modules = [A, B]

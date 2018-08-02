@@ -7,8 +7,8 @@ class NeuronGroup:
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
                  normalize_weights=(0,), time_constant=20, learning_rate=0.01, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
                  noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02, 
-                 log_head=True, log_head_out=True, log_neg_error=True, log_neg_error_diff=True, log_neg_error_out=True,
-                 log_pos_error_out=True, log_weights=True, log_noise_amplitude=True):
+                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
+                 log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
         self.name = name  # name of the neuron group
         self.names = [name[0] + '_' + str(circuit_num) for circuit_num in range(num_circuits)]
@@ -106,10 +106,11 @@ class NeuronGroup:
         self.noise_fall_rate = noise_fall_rate
         self.noise_fall_threshold = noise_fall_threshold
 
-    def enable_connections(self, target_error_pair, input_groups):
+    def enable_connections(self, input_groups, target_error_pair):
         """Enable connections from neuron groups in the list 'input_groups'
         to the error pair number 'target_error_pair'"""
-        self.target_error_pairs.append(target_error_pair)
+        if target_error_pair not in self.target_error_pairs:
+            self.target_error_pairs.append(target_error_pair)
         for input_group in input_groups:
             self.input_groups[target_error_pair].append(input_group)
 
@@ -238,7 +239,6 @@ class NeuronGroup:
                         axes.set_xlabel(x_label)
                     if error_pair_num == 0:
                         axes.set_ylabel("Circuit " + str(circuit_num))
-                        axes.set_ylim([-0.2, 1.2])
                     if self.log_head:
                         axes.plot(np.array(self.head_log)[:, circuit_num], 'b:', label=r'$' + self.names[circuit_num] + '.h^i$')
                     if self.log_head_out:
@@ -300,4 +300,54 @@ class NeuronGroup:
             plt.show()
 
 
+class ConvNet:
+    def __init__(self, image_height, image_width):
+        self.image_height = image_height
+        self.image_width = image_width
+        self.neuron_groups = []
+
+    def stack_layer(self, name, num_features, kernel_height, kernel_width, stride,
+                  pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
+                  noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
+                  dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=True,
+                  log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True,
+                  log_weights=False, log_noise_amplitude=False):
+
+        if len(self.neuron_groups) == 0:
+            input_height = self.image_height
+            input_width = self.image_width
+        else:
+            input_height = len(self.neuron_groups[-1])
+            input_width = len(self.neuron_groups[-1][-1])
+
+        y_in = 0
+        y_out = 0
+        neuron_groups = []
+        while y_in <= input_height - kernel_height:
+            x_in = 0
+            x_out = 0
+            new_row = []
+            while x_in <= input_width - kernel_width:
+                group_name = name + "_" + str(y_out) + str(x_out)
+                new_group = NeuronGroup(group_name, num_features, num_error_pairs=2, pos_error_to_head=pos_error_to_head,
+                                        neg_error_to_head=neg_error_to_head, time_constant=time_constant,
+                                        learning_rate=learning_rate, noise_max_amplitude=noise_max_amplitude,
+                                        noise_rise_rate=noise_rise_rate, noise_fall_rate=noise_fall_rate,
+                                        noise_fall_threshold=noise_fall_threshold,  dendrite_threshold=dendrite_threshold,
+                                        freeze_threshold=freeze_threshold, log_head=log_head, log_head_out=log_head_out,
+                                        log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
+                                        log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
+                                        log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
+                new_row.append(new_group)
+                if len(self.neuron_groups) != 0:
+                    for yy_in in range(y_in, y_in + kernel_height):
+                        for xx_in in range(x_in, x_in + kernel_width):
+                            new_group.enable_connections([self.neuron_groups[-1][yy_in][xx_in]], 0)
+                            self.neuron_groups[-1][yy_in][xx_in].enable_connections([new_group], 1)
+                x_in += stride
+                x_out += 1
+            neuron_groups.append(new_row)
+            y_in += stride
+            y_out += 1
+        self.neuron_groups.append(neuron_groups)
 
