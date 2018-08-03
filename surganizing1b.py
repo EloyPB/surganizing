@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+from matplotlib import colors
 
 
 class NeuronGroup:
@@ -305,6 +306,7 @@ class ConvNet:
         self.image_height = image_height
         self.image_width = image_width
         self.neuron_groups = []
+        self.num_groups = 0
 
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride,
                   pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
@@ -313,6 +315,7 @@ class ConvNet:
                   log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True,
                   log_weights=False, log_noise_amplitude=False):
 
+        self.num_groups += 1
         if len(self.neuron_groups) == 0:
             input_height = self.image_height
             input_width = self.image_width
@@ -351,3 +354,58 @@ class ConvNet:
             y_out += 1
         self.neuron_groups.append(neuron_groups)
 
+    def black_and_white(self, input_image):
+        external_input = np.zeros((self.image_height, self.image_width, 2, 2))
+        external_input[:, :, 0, 0] = input_image
+        external_input[:, :, 0, 1] = 1 - input_image
+        return external_input
+
+    def initialize(self):
+        for neuron_groups in self.neuron_groups:
+            for row_of_groups in neuron_groups:
+                for group in row_of_groups:
+                    group.initialize_weights()
+
+    def run(self, input_image, simulation_steps=1):
+        external_input = self.black_and_white(input_image)
+        for step_num in range(simulation_steps):
+            for group_num, neuron_groups in enumerate(self.neuron_groups):
+                for row_num, row_of_groups in enumerate(neuron_groups):
+                    for col_num, group in enumerate(row_of_groups):
+                        if group_num == 0:
+                            group.step(external_input[row_num, col_num])
+                        else:
+                            group.step()
+
+    def plot(self):
+        reds = colors.LinearSegmentedColormap.from_list('reds', [(1, 0, 0, 0), (1, 0, 0, 1)], N=100)
+        greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
+        blues = colors.LinearSegmentedColormap.from_list('blues', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
+
+        fig, ax = plt.subplots(1, self.num_groups)
+
+        for layer_num, neuron_groups in enumerate(self.neuron_groups):
+            height = len(neuron_groups)
+            width = len(neuron_groups[0])
+            num_features = neuron_groups[0][0].num_circuits
+
+            head_out = np.zeros((height, width*num_features))
+            neg_error_out = np.zeros((height, width*num_features))
+            pos_error_out = np.zeros((height, width*num_features))
+
+            for feature_num in range(num_features):
+                for row_num, row_of_groups in enumerate(neuron_groups):
+                    for col_num, neuron_group in enumerate(row_of_groups):
+                        head_out[row_num, col_num+feature_num*width] = neuron_group.head_out[feature_num]
+                        neg_error_out[row_num, col_num+feature_num*width] = neuron_group.neg_error_out[-1, feature_num]
+                        pos_error_out[row_num, col_num+feature_num*width] = neuron_group.pos_error_out[-1, feature_num]
+
+            ax[layer_num].matshow(head_out, cmap=blues, vmin=0, vmax=1)
+            ax[layer_num].matshow(neg_error_out, cmap=greens, vmin=0, vmax=1)
+            ax[layer_num].matshow(pos_error_out, cmap=reds, vmin=0, vmax=1)
+
+            ax[layer_num].set_xticks([i - 0.5 for i in range(width*num_features)], minor='true')
+            ax[layer_num].set_yticks([i - 0.5 for i in range(height)], minor='true')
+            ax[layer_num].grid(which='minor', linestyle='solid')
+
+        plt.show()
