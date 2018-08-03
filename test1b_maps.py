@@ -16,7 +16,7 @@ input_image = np.zeros((70, 14))
 input_image[10, :] = 1
 
 start_time = time.time()
-net.run(input_image, 50)
+net.run(input_image, 1, 10)
 print(time.time() - start_time)
 
 print("plotting...")

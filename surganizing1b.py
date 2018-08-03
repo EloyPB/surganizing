@@ -311,8 +311,8 @@ class ConvNet:
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride,
                   pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
                   noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
-                  dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=True,
-                  log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True,
+                  dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=False,
+                  log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False, log_pos_error_out=True,
                   log_weights=False, log_noise_amplitude=False):
 
         self.num_groups += 1
@@ -366,13 +366,14 @@ class ConvNet:
         external_input[:, :, 0, 1] = 1 - input_image
         return external_input
 
-    def run(self, input_image, simulation_steps=1):
+    def run(self, input_image, layers, simulation_steps=1):
         external_input = self.black_and_white(input_image)
         for step_num in range(simulation_steps):
-            for group_num, neuron_groups in enumerate(self.neuron_groups):
-                for row_num, row_of_groups in enumerate(neuron_groups):
+            print(step_num)
+            for layer in range(layers):
+                for row_num, row_of_groups in enumerate(self.neuron_groups[layer]):
                     for col_num, group in enumerate(row_of_groups):
-                        if group_num == 0:
+                        if layer == 0:
                             group.step(external_input[row_num, col_num])
                         else:
                             group.step()
@@ -406,6 +407,9 @@ class ConvNet:
 
             ax[layer_num].set_xticks([i - 0.5 for i in range(width*num_features)], minor='true')
             ax[layer_num].set_yticks([i - 0.5 for i in range(height)], minor='true')
-            ax[layer_num].grid(which='minor', linestyle='solid')
+            ax[layer_num].grid(which='minor', linestyle='solid', color='gray')
+
+            for boundary_num in range(num_features - 1):
+                ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
 
         plt.show()
