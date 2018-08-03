@@ -354,17 +354,17 @@ class ConvNet:
             y_out += 1
         self.neuron_groups.append(neuron_groups)
 
-    def black_and_white(self, input_image):
-        external_input = np.zeros((self.image_height, self.image_width, 2, 2))
-        external_input[:, :, 0, 0] = input_image
-        external_input[:, :, 0, 1] = 1 - input_image
-        return external_input
-
     def initialize(self):
         for neuron_groups in self.neuron_groups:
             for row_of_groups in neuron_groups:
                 for group in row_of_groups:
                     group.initialize_weights()
+
+    def black_and_white(self, input_image):
+        external_input = np.zeros((self.image_height, self.image_width, 2, 2))
+        external_input[:, :, 0, 0] = input_image
+        external_input[:, :, 0, 1] = 1 - input_image
+        return external_input
 
     def run(self, input_image, simulation_steps=1):
         external_input = self.black_and_white(input_image)
