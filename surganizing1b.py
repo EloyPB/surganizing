@@ -360,6 +360,14 @@ class ConvNet:
                 for group in row_of_groups:
                     group.initialize_weights()
 
+    def share_weights(self):
+        for neuron_groups in self.neuron_groups:
+            for y, row_of_groups in enumerate(neuron_groups):
+                for x, group in enumerate(row_of_groups):
+                    if y != round(len(neuron_groups)) or x != round(len(row_of_groups)):
+                        group.learning_off()
+                        group.weights = neuron_groups[round(len(neuron_groups)/2)][round(len(row_of_groups)/2)].weights
+
     def black_and_white(self, input_image):
         external_input = np.zeros((self.image_height, self.image_width, 2, 2))
         external_input[:, :, 0, 0] = input_image
