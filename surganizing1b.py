@@ -1,3 +1,5 @@
+import math
+import sys
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib import colors
@@ -6,13 +8,13 @@ from matplotlib import colors
 class NeuronGroup:
     """Initialization function"""
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
-                 normalize_weights=(0,), time_constant=20, learning_rate=0.01, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
+                 normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
                  noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02, 
-                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
+                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=True, log_neg_error_out=True,
                  log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
         self.name = name  # name of the neuron group
-        self.names = [name[0] + '_' + str(circuit_num) for circuit_num in range(num_circuits)]
+        self.names = [name + '_' + str(circuit_num) for circuit_num in range(num_circuits)]
         self.num_circuits = num_circuits  # number of mismatch detection circuits in the neuron group
         self.num_error_pairs = num_error_pairs
         self.pos_error_to_head = pos_error_to_head
@@ -48,6 +50,10 @@ class NeuronGroup:
         if log_head_out:
             self.head_out_log = [np.zeros(num_circuits)]
         self.k = 3  # constant for the activation function
+
+        self.head_external = np.zeros(num_circuits)
+        self.l = 50
+        self.m = 0.8
 
         # input to negative error neurons
         self.neg_error_input = np.zeros((num_error_pairs, num_circuits))
@@ -94,7 +100,7 @@ class NeuronGroup:
         # filtered with parameter noise_alpha
         self.noise_target = np.zeros(num_circuits)
         self.noise_step_num = 0
-        self.noise_period = 4*time_constant
+        self.noise_period = 6*time_constant
         self.noise_alpha = 0.98
         # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
         self.noise_amplitude = noise_max_amplitude*np.ones(self.num_circuits)
@@ -171,7 +177,7 @@ class NeuronGroup:
         for error_pair in self.target_error_pairs:
             input_values = []
             for module in self.input_groups[error_pair]:
-                input_values = np.append(input_values, module.head_out)
+                input_values = np.append(input_values, module.head_external)
 
             self.neg_error_input[error_pair] = self.dendrite_nonlinearity(np.dot(input_values, self.weights[error_pair]))
 
@@ -195,9 +201,12 @@ class NeuronGroup:
                       - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
-        self.head_out = np.clip(np.tanh(self.k*self.head), 0, 1)
+        self.head_out = np.clip(np.tanh(self.k*self.head), 0, a_max=None)
         if self.log_head_out:
             self.head_out_log.append(self.head_out)
+
+        # self.head_external = 1 / (1 + np.exp(-50*(self.head-0.8)))
+        self.head_external = np.where(self.head > 0.8, 1, 0)
 
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
         if external_input is not None:
@@ -309,11 +318,11 @@ class ConvNet:
         self.num_groups = 0
 
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride,
-                  pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
-                  noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
-                  dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=False,
-                  log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False, log_pos_error_out=True,
-                  log_weights=False, log_noise_amplitude=False):
+                    pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
+                    noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
+                    dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=True,
+                    log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True,
+                    log_weights=True, log_noise_amplitude=False):
 
         self.num_groups += 1
         if len(self.neuron_groups) == 0:
@@ -323,15 +332,16 @@ class ConvNet:
             input_height = len(self.neuron_groups[-1])
             input_width = len(self.neuron_groups[-1][-1])
 
-        y_in = 0
-        y_out = 0
+        # check sizes
+        if input_height % stride != 0 or input_width % stride != 0 or kernel_height % stride != 0 or kernel_width % stride != 0:
+            sys.exit("Make sure that the input and kernel sizes are multiples of the stride in layer: " + name)
+
+        # create new layer
         neuron_groups = []
-        while y_in <= input_height - kernel_height:
-            x_in = 0
-            x_out = 0
-            new_row = []
-            while x_in <= input_width - kernel_width:
-                group_name = name + "_" + str(y_out) + str(x_out)
+        for y_out in range(math.ceil(input_height/stride)):
+            row_of_groups = []
+            for x_out in range(math.ceil(input_width/stride)):
+                group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
                 new_group = NeuronGroup(group_name, num_features, num_error_pairs=2, pos_error_to_head=pos_error_to_head,
                                         neg_error_to_head=neg_error_to_head, time_constant=time_constant,
                                         learning_rate=learning_rate, noise_max_amplitude=noise_max_amplitude,
@@ -341,17 +351,28 @@ class ConvNet:
                                         log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
                                         log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
                                         log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
-                new_row.append(new_group)
+
+                # connect previous layer to new layer
                 if len(self.neuron_groups) != 0:
-                    for yy_in in range(y_in, y_in + kernel_height):
-                        for xx_in in range(x_in, x_in + kernel_width):
-                            new_group.enable_connections([self.neuron_groups[-1][yy_in][xx_in]], 0)
-                            self.neuron_groups[-1][yy_in][xx_in].enable_connections([new_group], 1)
-                x_in += stride
-                x_out += 1
-            neuron_groups.append(new_row)
-            y_in += stride
-            y_out += 1
+                    for y_in in range(y_out*stride, y_out*stride + kernel_height):
+                        y_in_periodic = y_in if y_in < input_height else y_in - input_height
+                        for x_in in range(x_out*stride, x_out*stride + kernel_width):
+                            x_in_periodic = x_in if x_in < input_width else x_in - input_width
+                            new_group.enable_connections([self.neuron_groups[-1][y_in_periodic][x_in_periodic]], 0)
+                row_of_groups.append(new_group)
+            neuron_groups.append(row_of_groups)
+
+        if len(self.neuron_groups) != 0:
+            for y_in in range(input_height):
+                first_y_out = int(y_in/stride - kernel_height/stride) + 1
+                last_y_out = int(y_in/stride) + 1
+                for x_in in range(input_width):
+                    first_x_out = int(x_in/stride - kernel_width/stride) + 1
+                    last_x_out = int(x_in/stride) + 1
+                    for y_out in range(first_y_out, last_y_out):
+                        for x_out in range(first_x_out, last_x_out):
+                            self.neuron_groups[-1][y_in][x_in].enable_connections([neuron_groups[y_out][x_out]], 1)
+
         self.neuron_groups.append(neuron_groups)
 
     def initialize(self):
@@ -364,9 +385,15 @@ class ConvNet:
         for neuron_groups in self.neuron_groups:
             for y, row_of_groups in enumerate(neuron_groups):
                 for x, group in enumerate(row_of_groups):
-                    if y != round(len(neuron_groups)) or x != round(len(row_of_groups)):
+                    if y != round(len(neuron_groups)/2) or x != round(len(row_of_groups)/2):
                         group.learning_off()
                         group.weights = neuron_groups[round(len(neuron_groups)/2)][round(len(row_of_groups)/2)].weights
+
+    def learning_off(self):
+        for neuron_groups in self.neuron_groups:
+            for row_of_groups in neuron_groups:
+                for group in row_of_groups:
+                    group.learning_off()
 
     def black_and_white(self, input_image):
         external_input = np.zeros((self.image_height, self.image_width, 2, 2))
