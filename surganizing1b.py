@@ -10,7 +10,7 @@ class NeuronGroup:
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
                  normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
                  noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02, 
-                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=True, log_neg_error_out=True,
+                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
                  log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
         self.name = name  # name of the neuron group
@@ -206,6 +206,7 @@ class NeuronGroup:
             self.head_out_log.append(self.head_out)
 
         # self.head_external = 1 / (1 + np.exp(-50*(self.head-0.8)))
+        # self.head_external = np.where(self.head > 0.8, 1, 0) * np.random.uniform(-1.001, 1.001, self.num_circuits)
         self.head_external = np.where(self.head > 0.8, 1, 0)
 
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
@@ -315,6 +316,8 @@ class ConvNet:
         self.image_height = image_height
         self.image_width = image_width
         self.neuron_groups = []
+        self.group_names = []
+        self.weight_shapes = []
         self.num_groups = 0
 
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride,
@@ -325,6 +328,9 @@ class ConvNet:
                     log_weights=True, log_noise_amplitude=False):
 
         self.num_groups += 1
+        self.group_names.append(name)
+        weight_shapes = [None, None]
+
         if len(self.neuron_groups) == 0:
             input_height = self.image_height
             input_width = self.image_width
@@ -362,7 +368,10 @@ class ConvNet:
                 row_of_groups.append(new_group)
             neuron_groups.append(row_of_groups)
 
+        # connect new layer to previous layer
         if len(self.neuron_groups) != 0:
+            weight_shapes[0] = [kernel_height, kernel_width]
+            self.weight_shapes[-1][1] = [int(kernel_height/stride), int(kernel_width/stride)]
             for y_in in range(input_height):
                 first_y_out = int(y_in/stride - kernel_height/stride) + 1
                 last_y_out = int(y_in/stride) + 1
@@ -374,6 +383,7 @@ class ConvNet:
                             self.neuron_groups[-1][y_in][x_in].enable_connections([neuron_groups[y_out][x_out]], 1)
 
         self.neuron_groups.append(neuron_groups)
+        self.weight_shapes.append(weight_shapes)
 
     def initialize(self):
         for neuron_groups in self.neuron_groups:
@@ -388,6 +398,18 @@ class ConvNet:
                     if y != round(len(neuron_groups)/2) or x != round(len(row_of_groups)/2):
                         group.learning_off()
                         group.weights = neuron_groups[round(len(neuron_groups)/2)][round(len(row_of_groups)/2)].weights
+
+    def save_weights(self):
+        for group_num, neuron_groups in enumerate(self.neuron_groups):
+            neuron_group = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)]
+            for error_pair in neuron_group.target_error_pairs:
+                np.savetxt("weights/" + self.group_names[group_num] + "_" + str(group_num) + "_" + str(error_pair), neuron_group.weights[error_pair])
+
+    def load_weights(self):
+        for group_num, neuron_groups in enumerate(self.neuron_groups):
+            neuron_group = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)]
+            for error_pair in neuron_group.target_error_pairs:
+                neuron_group.weights[error_pair] = np.loadtxt("weights/" + self.group_names[group_num] + "_" + str(group_num) + "_" + str(error_pair))
 
     def learning_off(self):
         for neuron_groups in self.neuron_groups:
@@ -413,7 +435,8 @@ class ConvNet:
                         else:
                             group.step()
 
-    def plot(self):
+    def plot(self, show=False):
+        # plot activities
         reds = colors.LinearSegmentedColormap.from_list('reds', [(1, 0, 0, 0), (1, 0, 0, 1)], N=100)
         greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
         blues = colors.LinearSegmentedColormap.from_list('blues', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
@@ -447,4 +470,43 @@ class ConvNet:
             for boundary_num in range(num_features - 1):
                 ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
 
-        plt.show()
+        # plot weights
+        num_target_pairs = len(self.neuron_groups)*2 - 2
+        target_pair_num = 0
+        fig_w, ax_w = plt.subplots(1, num_target_pairs)
+
+        for layer_num, neuron_groups in enumerate(self.neuron_groups):
+            error_pairs = []
+            if layer_num > 0:
+                error_pairs.append(0)
+            if layer_num < self.num_groups - 1:
+                error_pairs.append(1)
+
+            for error_pair in error_pairs:
+                weights = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)].weights[error_pair]
+                height = self.weight_shapes[layer_num][error_pair][0]
+                width = self.weight_shapes[layer_num][error_pair][1]
+                output_features = weights.shape[1]
+                input_features = int(weights.shape[0]/(height*width))
+                weights_reshaped = np.zeros((input_features*height, output_features*width))
+                for output_feature in range(output_features):
+                    for input_feature in range(input_features):
+                        y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
+                        indices = [y_indices, output_feature]
+                        weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
+
+                ax_w[target_pair_num].matshow(weights_reshaped)
+                ax_w[target_pair_num].set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                ax_w[target_pair_num].set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                ax_w[target_pair_num].grid(which='minor', linestyle='solid', color='gray')
+
+                for boundary_num in range(input_features - 1):
+                    ax_w[target_pair_num].axvline(width + width * boundary_num - 0.5, color='w')
+                for boundary_num in range(output_features - 1):
+                    ax_w[target_pair_num].axhline(height + height * boundary_num - 0.5, color='w')
+
+
+                target_pair_num += 1
+
+        if show:
+            plt.show()
