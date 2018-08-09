@@ -340,7 +340,7 @@ class ConvNet:
 
         # check sizes
         if input_height % stride != 0 or input_width % stride != 0 or kernel_height % stride != 0 or kernel_width % stride != 0:
-            sys.exit("Make sure that the input and kernel sizes are multiples of the stride in layer: " + name)
+            print("Input or kernel sizes are not multiples of the stride in layer " + name)
 
         # create new layer
         neuron_groups = []
@@ -384,6 +384,7 @@ class ConvNet:
 
         self.neuron_groups.append(neuron_groups)
         self.weight_shapes.append(weight_shapes)
+        print("Created layer " + name + " of size: (" + str(len(neuron_groups)) + ", " + str(len(neuron_groups[0])) + ")")
 
     def initialize(self):
         for neuron_groups in self.neuron_groups:

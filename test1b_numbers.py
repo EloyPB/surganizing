@@ -5,8 +5,8 @@ from surganizing1b import ConvNet
 net = ConvNet(70, 14)
 net.stack_layer('pixels', 2, 1, 1, 1)
 net.stack_layer('macropixels', 2, 2, 2, 1)
-net.stack_layer('symbols', 10, 13, 13, 13)
-net.stack_layer('operations', 5, 5, 1, 5)
+net.stack_layer('symbols', 10, 14, 14, 14)
+net.stack_layer('operations', 2, 5, 5, 5)
 net.initialize()
 
 for layer in net.neuron_groups:
