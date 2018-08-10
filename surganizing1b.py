@@ -23,7 +23,7 @@ class NeuronGroup:
         self.time_constant = time_constant
         self.fast_time_constant = time_constant/10
         self.default_learning_rate = learning_rate
-        self.learning_rate = learning_rate
+        self.learning_rate = [learning_rate for _ in range(num_error_pairs)]
 
         # parameters for the dendritic nonlinearity
         self.dendrite_threshold = dendrite_threshold
@@ -160,11 +160,16 @@ class NeuronGroup:
         return np.where(input_values < self.dendrite_threshold, 0, input_values*self.dendrite_slope
                         + self.dendrite_offset)
 
-    def learning_off(self):
-        self.learning_rate = 0
+    def learning_off(self, error_pairs):
+        for error_pair in error_pairs:
+            self.learning_rate[error_pair] = 0
 
-    def learning_on(self, learning_rate=False):
-        self.learning_rate = learning_rate if learning_rate else self.default_learning_rate
+    def learning_on(self, learning_rates=[]):
+        if len(learning_rates) > 0:
+            for error_pair, learning_rate in enumerate(learning_rates):
+                self.learning_rate[error_pair] = learning_rate
+        else:
+            self.learning_rate = [self.default_learning_rate for _ in range(self.num_error_pairs)]
 
     def step(self, external_input=None):
         """Run one step of the simulation"""
@@ -181,13 +186,13 @@ class NeuronGroup:
 
             self.neg_error_input[error_pair] = self.dendrite_nonlinearity(np.dot(input_values, self.weights[error_pair]))
 
-            if self.learning_rate:
+            if self.learning_rate[error_pair]:
                 weight_update = np.where(self.freeze_count[error_pair], 0, np.dot(input_values[:, np.newaxis],
                                                                                   - self.neg_error[error_pair][np.newaxis]))
                 if error_pair in self.normalize_weights:
                     weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
 
-                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate*weight_update, a_min=0, a_max=None)  # clip weights below 0
+                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate[error_pair]*weight_update, a_min=0, a_max=None)  # clip weights below 0
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
@@ -318,9 +323,10 @@ class ConvNet:
         self.neuron_groups = []
         self.group_names = []
         self.weight_shapes = []
+        self.fields = []
         self.num_groups = 0
 
-    def stack_layer(self, name, num_features, kernel_height, kernel_width, stride_y, stride_x,
+    def stack_layer(self, name, num_features, kernel_height, kernel_width, stride_y, stride_x, field=(),
                     pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
                     noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
                     dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=True,
@@ -329,6 +335,7 @@ class ConvNet:
 
         self.num_groups += 1
         self.group_names.append(name)
+        self.fields.append(field)
         weight_shapes = [None, None]
 
         if len(self.neuron_groups) == 0:
@@ -393,12 +400,19 @@ class ConvNet:
                     group.initialize_weights()
 
     def share_weights(self):
-        for neuron_groups in self.neuron_groups:
+        for layer_num, neuron_groups in enumerate(self.neuron_groups):
             for y, row_of_groups in enumerate(neuron_groups):
                 for x, group in enumerate(row_of_groups):
-                    if y != round(len(neuron_groups)/2) or x != round(len(row_of_groups)/2):
-                        group.learning_off()
-                        group.weights = neuron_groups[round(len(neuron_groups)/2)][round(len(row_of_groups)/2)].weights
+                    if y != 0 or x != 0:
+                        group.learning_off([0])
+                        group.weights[0] = neuron_groups[0][0].weights[0]
+
+                    if layer_num < self.num_groups - 1:
+                        field_y = self.fields[layer_num][0]
+                        field_x = self.fields[layer_num][1]
+                        if y >= field_y or x >= field_x:
+                            group.learning_off([1])
+                            group.weights[1] = neuron_groups[y % field_y][x % field_x].weights[1]
 
     def save_weights(self):
         for group_num, neuron_groups in enumerate(self.neuron_groups):
@@ -472,42 +486,65 @@ class ConvNet:
                 ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
 
         # plot weights
-        num_target_pairs = len(self.neuron_groups)*2 - 2
-        target_pair_num = 0
-        fig_w, ax_w = plt.subplots(1, num_target_pairs)
-
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
-            error_pairs = []
-            if layer_num > 0:
-                error_pairs.append(0)
-            if layer_num < self.num_groups - 1:
-                error_pairs.append(1)
+            for error_pair in range(neuron_groups[0][0].num_error_pairs):
+                if error_pair == 0 and layer_num > 0:
+                    fig, ax = plt.subplots()
+                    height = self.weight_shapes[layer_num][error_pair][0]
+                    width = self.weight_shapes[layer_num][error_pair][1]
 
-            for error_pair in error_pairs:
-                weights = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)].weights[error_pair]
-                height = self.weight_shapes[layer_num][error_pair][0]
-                width = self.weight_shapes[layer_num][error_pair][1]
-                output_features = weights.shape[1]
-                input_features = int(weights.shape[0]/(height*width))
-                weights_reshaped = np.zeros((input_features*height, output_features*width))
-                for output_feature in range(output_features):
-                    for input_feature in range(input_features):
-                        y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-                        indices = [y_indices, output_feature]
-                        weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
+                    weights = neuron_groups[0][0].weights[error_pair]
+                    output_features = weights.shape[1]
+                    input_features = int(weights.shape[0] / (height * width))
 
-                ax_w[target_pair_num].matshow(weights_reshaped)
-                print(weights_reshaped.shape)
-                ax_w[target_pair_num].set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                ax_w[target_pair_num].set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                ax_w[target_pair_num].grid(which='minor', linestyle='solid', color='gray')
-                #
-                # for boundary_num in range(input_features - 1):
-                #     ax_w[target_pair_num].axvline(width + width * boundary_num - 0.5, color='w')
-                # for boundary_num in range(output_features - 1):
-                #     ax_w[target_pair_num].axhline(height + height * boundary_num - 0.5, color='w')
+                    weights_reshaped = np.zeros((input_features*height, output_features*width))
+                    for output_feature in range(output_features):
+                        for input_feature in range(input_features):
+                            y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
+                            indices = [y_indices, output_feature]
+                            weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
 
-                target_pair_num += 1
+                    ax.matshow(weights_reshaped)
+                    ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                    ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                    ax.grid(which='minor', linestyle='solid', color='gray')
+
+                    for boundary_num in range(output_features - 1):
+                        ax.axvline(width + width * boundary_num - 0.5, color='w')
+                    for boundary_num in range(input_features - 1):
+                        ax.axhline(height + height * boundary_num - 0.5, color='w')
+
+                if error_pair == 1 and layer_num < self.num_groups - 1:
+                    fig, ax = plt.subplots()
+                    height = self.weight_shapes[layer_num][error_pair][0]
+                    width = self.weight_shapes[layer_num][error_pair][1]
+
+                    weights = neuron_groups[0][0].weights[error_pair]
+                    output_features = weights.shape[1]
+                    input_features = int(weights.shape[0] / (height * width))
+
+                    height *= self.fields[layer_num][0]
+                    width *= self.fields[layer_num][1]
+                    weights_reshaped = np.zeros((input_features * height, output_features * width))
+
+                    print(weights_reshaped.shape)
+
+                    for output_feature in range(output_features):
+                        for input_feature in range(input_features):
+                            for y in range(self.fields[layer_num][0]):
+                                for x in range(self.fields[layer_num][1]):
+                                    weights_reshaped[height*input_feature + y, width*output_feature + x] = neuron_groups[y][x].weights[error_pair][input_feature, output_feature]
+
+                    ax.matshow(weights_reshaped)
+                    ax.matshow(weights_reshaped)
+                    ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                    ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                    ax.grid(which='minor', linestyle='solid', color='gray')
+
+                    for boundary_num in range(output_features - 1):
+                        ax.axvline(width + width * boundary_num - 0.5, color='w')
+                    for boundary_num in range(input_features - 1):
+                        ax.axhline(height + height * boundary_num - 0.5, color='w')
 
         if show:
             plt.show()
