@@ -329,9 +329,9 @@ class ConvNet:
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride_y, stride_x, field=(),
                     pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
                     noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
-                    dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=True,
-                    log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True,
-                    log_weights=True, log_noise_amplitude=False):
+                    dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=False,
+                    log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False, log_pos_error_out=False,
+                    log_weights=False, log_noise_amplitude=False):
 
         self.num_groups += 1
         self.group_names.append(name)
@@ -414,23 +414,31 @@ class ConvNet:
                             group.learning_off([1])
                             group.weights[1] = neuron_groups[y % field_y][x % field_x].weights[1]
 
-    def save_weights(self):
-        for group_num, neuron_groups in enumerate(self.neuron_groups):
-            neuron_group = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)]
-            for error_pair in neuron_group.target_error_pairs:
-                np.savetxt("weights/" + self.group_names[group_num] + "_" + str(group_num) + "_" + str(error_pair), neuron_group.weights[error_pair])
+    def save_weights(self, folder_name):
+        for layer_num, neuron_groups in enumerate(self.neuron_groups):
+            if layer_num > 0:
+                weights = neuron_groups[0][0].weights[0]
+                np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0", weights)
+            if layer_num < self.num_groups - 1:
+                for y in range(self.fields[layer_num][0]):
+                    for x in range(self.fields[layer_num][1]):
+                        weights = neuron_groups[y][x].weights[1]
+                        np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1", weights)
 
-    def load_weights(self):
-        for group_num, neuron_groups in enumerate(self.neuron_groups):
-            neuron_group = neuron_groups[round(len(neuron_groups)/2)][round(len(neuron_groups[0])/2)]
-            for error_pair in neuron_group.target_error_pairs:
-                neuron_group.weights[error_pair] = np.loadtxt("weights/" + self.group_names[group_num] + "_" + str(group_num) + "_" + str(error_pair))
+    def load_weights(self, folder_name):
+        for layer_num, neuron_groups in enumerate(self.neuron_groups):
+            if layer_num > 0:
+                neuron_groups[0][0].weights[0] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
+            if layer_num < self.num_groups - 1:
+                for y in range(self.fields[layer_num][0]):
+                    for x in range(self.fields[layer_num][1]):
+                        neuron_groups[y][x].weights[1] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
 
     def learning_off(self):
         for neuron_groups in self.neuron_groups:
             for row_of_groups in neuron_groups:
                 for group in row_of_groups:
-                    group.learning_off()
+                    group.learning_off([0, 1])
 
     def black_and_white(self, input_image):
         external_input = np.zeros((self.image_height, self.image_width, 2, 2))
@@ -438,8 +446,10 @@ class ConvNet:
         external_input[:, :, 0, 1] = 1 - input_image
         return external_input
 
-    def run(self, input_image, layers, simulation_steps=1):
+    def run(self, input_image, simulation_steps=1, layers=0):
         external_input = self.black_and_white(input_image)
+        if layers == 0:
+            layers = self.num_groups
         for step_num in range(simulation_steps):
             print(step_num)
             for layer in range(layers):
