@@ -4,7 +4,8 @@ from os import listdir
 from surganizing1b import ConvNet
 
 
-train = True
+train_layers = [0, 0, 0]
+test = 1
 
 image_size = (70, 14)
 
@@ -21,31 +22,55 @@ folder_name = 'symbols'
 for symbol in listdir(folder_name):
     symbols[symbol] = np.loadtxt(folder_name + '/' + symbol)
 
-operations = [['0', '+', '0', '=', '0'], ['1', '+', '1', '=', '2']]
+training_examples = [['0', '+', '0', '=', '0'], ['1', '+', '1', '=', '2']]
+training_rounds = 1
 
-if train:
-    num_rounds = 1
-    num_steps = 10
-else:
-    num_rounds = 1
-    num_steps = 200
+if train_layers[0]:
+    for training_round in range(training_rounds):
+        input_image = np.zeros(image_size)
+        net.run(input_image, simulation_steps=3000, layers=2)
+        input_image = np.ones(image_size)
+        net.run(input_image, simulation_steps=3000, layers=2)
+        net.save_weights("weights")
+
+if train_layers[1]:
+    net.load_weights("weights")
+    for training_round in range(training_rounds):
+        for symbol, symbol_image in symbols.items():
+            input_image = np.zeros(image_size)
+            input_image[0:14, 0:14] = symbol_image
+            net.run(input_image, simulation_steps=3000, layers=3)
+    net.save_weights("weights")
+
+if train_layers[2]:
+    net.load_weights("weights")
+    for training_round in range(training_rounds):
+        for training_example in training_examples:
+            input_image = symbols[training_example[0]]
+            for symbol in training_example[1:]:
+                input_image = np.append(input_image, symbols[symbol], 0)
+            net.run(input_image, simulation_steps=3000, layers=4)
+    net.save_weights("weights")
+
+if test:
     net.load_weights("weights")
     net.learning_off()
 
-blank_image = np.zeros(image_size)
-for round_num in range(num_rounds):
-    for operation in operations:
-        input_image = symbols[operation[0]]
-        for symbol in operation[1:]:
+    test_examples = [['0', '+', '0', '=', '0']]
+    blank_image = np.zeros(image_size)
+    num_steps = 60
+
+    for test_example in test_examples:
+        input_image = symbols[test_example[0]]
+        for symbol in test_example[1:]:
             input_image = np.append(input_image, symbols[symbol], 0)
 
         start_time = time.time()
         net.run(blank_image, simulation_steps=1)
         net.run(input_image, simulation_steps=num_steps)
         print(time.time() - start_time)
+        print("plotting...")
+        net.plot(plot_weights=True, show=True)
 
-if train:
-    net.save_weights("weights")
 
-print("plotting...")
-net.plot(True)
+

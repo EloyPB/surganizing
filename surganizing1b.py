@@ -9,7 +9,7 @@ class NeuronGroup:
     """Initialization function"""
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
                  normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
-                 noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02, 
+                 noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=3/4, freeze_threshold=0.02,
                  log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
                  log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
@@ -463,7 +463,7 @@ class ConvNet:
                         else:
                             group.step()
 
-    def plot(self, show=False):
+    def plot(self, plot_weights=False, show=False):
         # plot activities
         reds = colors.LinearSegmentedColormap.from_list('reds', [(1, 0, 0, 0), (1, 0, 0, 1)], N=100)
         greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
@@ -499,65 +499,66 @@ class ConvNet:
                 ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
 
         # plot weights
-        for layer_num, neuron_groups in enumerate(self.neuron_groups):
-            for error_pair in range(neuron_groups[0][0].num_error_pairs):
-                if error_pair == 0 and layer_num > 0:
-                    fig, ax = plt.subplots()
-                    height = self.weight_shapes[layer_num][error_pair][0]
-                    width = self.weight_shapes[layer_num][error_pair][1]
+        if plot_weights:
+            for layer_num, neuron_groups in enumerate(self.neuron_groups):
+                for error_pair in range(neuron_groups[0][0].num_error_pairs):
+                    if error_pair == 0 and layer_num > 0:
+                        fig, ax = plt.subplots()
+                        height = self.weight_shapes[layer_num][error_pair][0]
+                        width = self.weight_shapes[layer_num][error_pair][1]
 
-                    weights = neuron_groups[0][0].weights[error_pair]
-                    output_features = weights.shape[1]
-                    input_features = int(weights.shape[0] / (height * width))
+                        weights = neuron_groups[0][0].weights[error_pair]
+                        output_features = weights.shape[1]
+                        input_features = int(weights.shape[0] / (height * width))
 
-                    weights_reshaped = np.zeros((input_features*height, output_features*width))
-                    for output_feature in range(output_features):
-                        for input_feature in range(input_features):
-                            y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-                            indices = [y_indices, output_feature]
-                            weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
+                        weights_reshaped = np.zeros((input_features*height, output_features*width))
+                        for output_feature in range(output_features):
+                            for input_feature in range(input_features):
+                                y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
+                                indices = [y_indices, output_feature]
+                                weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
 
-                    ax.matshow(weights_reshaped)
-                    ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                    ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                    ax.grid(which='minor', linestyle='solid', color='gray')
+                        ax.matshow(weights_reshaped)
+                        ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                        ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                        ax.grid(which='minor', linestyle='solid', color='gray')
 
-                    for boundary_num in range(output_features - 1):
-                        ax.axvline(width + width * boundary_num - 0.5, color='w')
-                    for boundary_num in range(input_features - 1):
-                        ax.axhline(height + height * boundary_num - 0.5, color='w')
+                        for boundary_num in range(output_features - 1):
+                            ax.axvline(width + width * boundary_num - 0.5, color='w')
+                        for boundary_num in range(input_features - 1):
+                            ax.axhline(height + height * boundary_num - 0.5, color='w')
 
-                if error_pair == 1 and layer_num < self.num_groups - 1:
-                    fig, ax = plt.subplots()
-                    height = self.weight_shapes[layer_num][error_pair][0]
-                    width = self.weight_shapes[layer_num][error_pair][1]
+                    if error_pair == 1 and layer_num < self.num_groups - 1:
+                        fig, ax = plt.subplots()
+                        height = self.weight_shapes[layer_num][error_pair][0]
+                        width = self.weight_shapes[layer_num][error_pair][1]
 
-                    weights = neuron_groups[0][0].weights[error_pair]
-                    output_features = weights.shape[1]
-                    input_features = int(weights.shape[0] / (height * width))
+                        weights = neuron_groups[0][0].weights[error_pair]
+                        output_features = weights.shape[1]
+                        input_features = int(weights.shape[0] / (height * width))
 
-                    full_height = height * self.fields[layer_num][0]
-                    full_width = width * self.fields[layer_num][1]
-                    weights_reshaped = np.zeros((input_features * full_height, output_features * full_width))
+                        full_height = height * self.fields[layer_num][0]
+                        full_width = width * self.fields[layer_num][1]
+                        weights_reshaped = np.zeros((input_features * full_height, output_features * full_width))
 
-                    for output_feature in range(output_features):
-                        for input_feature in range(input_features):
-                            y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-                            indices = [y_indices, output_feature]
-                            for y in range(self.fields[layer_num][0]):
-                                for x in range(self.fields[layer_num][1]):
-                                    weights_reshaped[full_height*input_feature + y*height:full_height*input_feature + (y+1)*height, full_width*output_feature + x*width:full_width*output_feature + (x+1)*width] = neuron_groups[y][x].weights[error_pair][indices].reshape((height, width))
+                        for output_feature in range(output_features):
+                            for input_feature in range(input_features):
+                                y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
+                                indices = [y_indices, output_feature]
+                                for y in range(self.fields[layer_num][0]):
+                                    for x in range(self.fields[layer_num][1]):
+                                        weights_reshaped[full_height*input_feature + y*height:full_height*input_feature + (y+1)*height, full_width*output_feature + x*width:full_width*output_feature + (x+1)*width] = neuron_groups[y][x].weights[error_pair][indices].reshape((height, width))
 
-                    ax.matshow(weights_reshaped)
-                    ax.matshow(weights_reshaped)
-                    ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                    ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                    ax.grid(which='minor', linestyle='solid', color='gray')
+                        ax.matshow(weights_reshaped)
+                        ax.matshow(weights_reshaped)
+                        ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                        ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                        ax.grid(which='minor', linestyle='solid', color='gray')
 
-                    for boundary_num in range(output_features - 1):
-                        ax.axvline(full_width + full_width * boundary_num - 0.5, color='w')
-                    for boundary_num in range(input_features - 1):
-                        ax.axhline(full_height + full_height * boundary_num - 0.5, color='w')
+                        for boundary_num in range(output_features - 1):
+                            ax.axvline(full_width + full_width * boundary_num - 0.5, color='w')
+                        for boundary_num in range(input_features - 1):
+                            ax.axhline(full_height + full_height * boundary_num - 0.5, color='w')
 
         if show:
             plt.show()
