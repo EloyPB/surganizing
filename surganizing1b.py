@@ -555,9 +555,9 @@ class ConvNet:
                     ax.grid(which='minor', linestyle='solid', color='gray')
 
                     for boundary_num in range(output_features - 1):
-                        ax.axvline(width + width * boundary_num - 0.5, color='w')
+                        ax.axvline(full_width + full_width * boundary_num - 0.5, color='w')
                     for boundary_num in range(input_features - 1):
-                        ax.axhline(height + height * boundary_num - 0.5, color='w')
+                        ax.axhline(full_height + full_height * boundary_num - 0.5, color='w')
 
         if show:
             plt.show()
