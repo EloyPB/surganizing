@@ -17,15 +17,15 @@ log_weights = True
 log_s_diff = False
 
 A = NeuronGroup(name="A", num_circuits=sizes[0], num_error_pairs=s_pairs[0], pos_error_to_head=pos_error_to_head[0],
-                neg_error_to_head=neg_error_to_head[0], normalize_weights=normalize_weights[0],
+                neg_error_to_head=neg_error_to_head[0], normalize_weights=normalize_weights[0], dendrite_threshold=0,
                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
 B = NeuronGroup(name="B", num_circuits=sizes[1], num_error_pairs=s_pairs[1], pos_error_to_head=pos_error_to_head[1],
-                neg_error_to_head=neg_error_to_head[1], normalize_weights=normalize_weights[1],
+                neg_error_to_head=neg_error_to_head[1], normalize_weights=normalize_weights[1],  dendrite_threshold=0,
                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
 C = NeuronGroup(name="C", num_circuits=sizes[2], num_error_pairs=s_pairs[2], pos_error_to_head=pos_error_to_head[2],
-                neg_error_to_head=neg_error_to_head[2], normalize_weights=normalize_weights[2],
+                neg_error_to_head=neg_error_to_head[2], normalize_weights=normalize_weights[2], dendrite_threshold=0,
                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
 A.enable_connections(input_groups=[B, C], target_error_pair=1)
@@ -41,18 +41,14 @@ modules = [A, B, C]
 s_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(s_pairs, sizes)]
 
 start_time = time.time()
-for input_num in range(2*sizes[0]):
-    input_num = input_num%sizes[0]
-    s_input[0][0, input_num] = 1
-    for t in range(5000):
-        for module_num, module in enumerate(modules):
-            module.step(external_input=s_input[module_num])
-    s_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(s_pairs, sizes)]
-    for t in range(100):
-        for module_num, module in enumerate(modules):
-            module.step(external_input=s_input[module_num])
+s_input[0][0, 0] = 1
+for t in range(20000):
+    for module_num, module in enumerate(modules):
+        module.step(external_input=s_input[module_num])
+
 
 print(time.time() - start_time)
+print(A.weights)
 print("plotting...")
 
 for module in modules:

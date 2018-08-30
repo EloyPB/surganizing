@@ -14,7 +14,7 @@ input_image = np.zeros((10, 5))
 
 if learn:
     start_time = time.time()
-    net.run(input_image, 3000, 2)
+    net.run(input_image, 5000, 2)
     print(time.time() - start_time)
     net.save_weights('weights')
 else:
@@ -26,7 +26,4 @@ input_image[4, :] = 1
 net.run(input_image, 200, 2)
 
 print("plotting...")
-net.plot(show=True)
-
-# net.neuron_groups[0][0][0].plot_circuits()
-# net.neuron_groups[1][0][0].plot_circuits(show=True)
+net.plot(show=True, plot_weights=True)

@@ -9,7 +9,7 @@ class NeuronGroup:
     """Initialization function"""
     def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
                  normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
-                 noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=3/4, freeze_threshold=0.02,
+                 noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02,
                  log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
                  log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
@@ -114,6 +114,9 @@ class NeuronGroup:
         self.noise_fall_rate = noise_fall_rate
         self.noise_fall_threshold = noise_fall_threshold
 
+        # self.i = 0
+        # self.nn = 0
+
     def enable_connections(self, input_groups, target_error_pair):
         """Enable connections from neuron groups in the list 'input_groups'
         to the error pair number 'target_error_pair'"""
@@ -194,11 +197,11 @@ class NeuronGroup:
                 if error_pair in self.normalize_weights:
                     weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
 
-                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate[error_pair]*weight_update, a_min=0, a_max=None)  # clip weights below 0
+                # self.weights[error_pair] = np.clip(0.99995*self.weights[error_pair] + self.learning_rate[error_pair]*weight_update, a_min=0, a_max=None)  # clip weights below 0
+                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate[error_pair] * weight_update, a_min=0, a_max=None)  # clip weights below 0
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
-
 
         # update the activity of inhibitory neuron
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.fast_time_constant
@@ -214,7 +217,11 @@ class NeuronGroup:
             self.head_out_log.append(self.head_out)
 
         # self.head_external = 1 / (1 + np.exp(-50*(self.head-0.8)))
-        # self.head_external = np.where(self.head > 0.8, 1, 0) * np.random.uniform(-1.001, 1.001, self.num_circuits)
+        # if self.i % 50 == 0:
+        #     self.nn = np.random.uniform(1, 1, self.num_circuits)
+        # self.i += 1
+        # self.head_external = self.head_out * self.nn
+
         self.head_external = np.where(self.head > 0.8, 1, 0)
 
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
@@ -332,7 +339,7 @@ class ConvNet:
     def stack_layer(self, name, num_features, kernel_height, kernel_width, stride_y, stride_x, field=(),
                     pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
                     noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
-                    dendrite_threshold=2/3, freeze_threshold=0.02,  log_head=False, log_head_out=False,
+                    dendrite_threshold=3/4, freeze_threshold=0.02,  log_head=False, log_head_out=False,
                     log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False, log_pos_error_out=False,
                     log_weights=False, log_noise_amplitude=False):
 
@@ -437,11 +444,12 @@ class ConvNet:
                     for x in range(self.fields[layer_num][1]):
                         neuron_groups[y][x].weights[1] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
 
-    def learning_off(self):
-        for neuron_groups in self.neuron_groups:
-            for row_of_groups in neuron_groups:
+    def learning_off(self, layers_and_pairs):
+        for layer_and_pairs in layers_and_pairs:
+            layer_num = layer_and_pairs[0]
+            for row_of_groups in self.neuron_groups[layer_num]:
                 for group in row_of_groups:
-                    group.learning_off([0, 1])
+                    group.learning_off(layer_and_pairs[1])
 
     def black_and_white(self, input_image):
         external_input = np.zeros((self.image_height, self.image_width, 2, 2))
