@@ -45,8 +45,8 @@ learn = True
 
 image_shape = (14, 10)
 net = ConvNet(image_shape[0], image_shape[1])
-net.stack_layer('m', num_features=2, kernel_height=1, kernel_width=1, stride_y=1, stride_x=1, field=(14, 10), freeze_threshold=100, learning_rate=0.0005)
-net.stack_layer('s', num_features=4, kernel_height=14, kernel_width=10, stride_y=14, stride_x=10, freeze_threshold=100, learning_rate=0.0005)
+net.stack_layer('m', num_features=2, kernel=(1, 1), stride=(1, 1), field=(14, 10), freeze_threshold=100, learning_rate=0.0005)
+net.stack_layer('s', num_features=4, kernel=(14, 10), stride=(14, 10), freeze_threshold=100, learning_rate=0.0005)
 net.initialize()
 net.share_weights()
 
