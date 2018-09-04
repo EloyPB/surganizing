@@ -331,13 +331,14 @@ class ConvNet:
         self.image_height = image_height
         self.image_width = image_width
         self.neuron_groups = []
-        self.is_filler = []
         self.group_names = []
-        self.weight_shapes = []
-        self.fields = []
         self.num_groups = 0
+        self.strides = []
+        self.kernel_sizes = []
+        self.offsets = []
+        self.filler = []
 
-    def stack_layer(self, name, num_features, kernel, stride, offset=(0, 0), field=(),
+    def stack_layer(self, name, num_features, kernel_size, stride, offset=(0, 0), 
                     pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
                     noise_max_amplitude=0.15, noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,
                     dendrite_threshold=3/4, freeze_threshold=0.02,  log_head=False, log_head_out=False,
@@ -346,8 +347,9 @@ class ConvNet:
 
         self.num_groups += 1
         self.group_names.append(name)
-        self.fields.append(field)
-        weight_shapes = [None, None]
+        self.kernel_sizes.append(kernel_size)
+        self.strides.append(stride)
+        self.offsets.append(offset)
 
         if len(self.neuron_groups) == 0:
             input_height = self.image_height
@@ -355,12 +357,13 @@ class ConvNet:
         else:
             input_height = len(self.neuron_groups[-1])
             input_width = len(self.neuron_groups[-1][-1])
+            self.filler.append(np.ones((len(self.neuron_groups[-1]), len(self.neuron_groups[-1][-1]))))
 
         # check sizes
         if (input_height % stride[0] != 0 or input_width % stride[1] != 0
-                or kernel[0] % stride[0] != 0 and kernel[0] > stride[0]
-                or kernel[1] % stride[1] != 0 and kernel[1] > stride[1]):
-            sys.exit("Input or kernel sizes are not multiples of the stride in layer " + name)
+                or kernel_size[0] % stride[0] != 0 and kernel_size[0] > stride[0]
+                or kernel_size[1] % stride[1] != 0 and kernel_size[1] > stride[1]):
+            sys.exit("Input or kernel_size sizes are not multiples of the stride in layer " + name)
 
         # create new layer
         neuron_groups = []
@@ -380,34 +383,29 @@ class ConvNet:
 
                 # connect previous layer to new layer
                 if len(self.neuron_groups) != 0:
-                    self.is_filler.append(np.ones((len(self.neuron_groups[-1]), len(self.neuron_groups[-1][-1]))))
-                    for y_in in range(y_out*stride[0] + offset[0], y_out*stride[0] + offset[0] + kernel[0]):
+                    for y_in in range(y_out*stride[0] + offset[0], y_out*stride[0] + offset[0] + kernel_size[0]):
                         y_in_periodic = y_in if y_in < input_height else y_in - input_height
-                        for x_in in range(x_out*stride[1] + offset[1], x_out*stride[1] + offset[1] + kernel[1]):
+                        for x_in in range(x_out*stride[1] + offset[1], x_out*stride[1] + offset[1] + kernel_size[1]):
                             x_in_periodic = x_in if x_in < input_width else x_in - input_width
                             new_group.enable_connections([self.neuron_groups[-1][y_in_periodic][x_in_periodic]], 0)
-                            self.is_filler[-1][y_in_periodic][x_in_periodic] = 0
+                            self.filler[-1][y_in_periodic][x_in_periodic] = 0
                 row_of_groups.append(new_group)
             neuron_groups.append(row_of_groups)
 
         # connect new layer to previous layer
         if len(self.neuron_groups) != 0:
-            weight_shapes[0] = [kernel[0], kernel[1]]
-            self.weight_shapes[-1][1] = [max(int(kernel[0]/stride[0]), 1), max(int(kernel[1]/stride[1]), 1)]
-
             for y_in in range(input_height):
-                first_y_out = (y_in - offset[0])//stride[0] - max(kernel[0]//stride[0] - 1, 0)
+                first_y_out = (y_in - offset[0])//stride[0] - max(kernel_size[0]//stride[0] - 1, 0)
                 last_y_out = (y_in - offset[0])//stride[0] + 1
                 for x_in in range(input_width):
-                    if self.is_filler[-1][y_in][x_in] == 0:
-                        first_x_out = (x_in - offset[1])//stride[1] - max(kernel[1]//stride[1] - 1, 0)
+                    if self.filler[-1][y_in][x_in] == 0:
+                        first_x_out = (x_in - offset[1])//stride[1] - max(kernel_size[1]//stride[1] - 1, 0)
                         last_x_out = (x_in - offset[1])//stride[1] + 1
                         for y_out in range(first_y_out, last_y_out):
                             for x_out in range(first_x_out, last_x_out):
                                 self.neuron_groups[-1][y_in][x_in].enable_connections([neuron_groups[y_out][x_out]], 1)
 
         self.neuron_groups.append(neuron_groups)
-        self.weight_shapes.append(weight_shapes)
         print("Created layer " + name + " of size: (" + str(len(neuron_groups)) + ", " + str(len(neuron_groups[0])) + ")")
 
     def initialize(self):
@@ -425,11 +423,18 @@ class ConvNet:
                         group.weights_from[0] = neuron_groups[0][0]
 
                     if layer_num < self.num_groups - 1:
-                        field_y = self.fields[layer_num][0]
-                        field_x = self.fields[layer_num][1]
-                        if y >= field_y or x >= field_x:
+                        kernel_y = self.kernel_sizes[layer_num + 1][0]
+                        kernel_x = self.kernel_sizes[layer_num + 1][1]
+                        stride_y = self.strides[layer_num + 1][0]
+                        stride_x = self.strides[layer_num + 1][1]
+                        offset_x = self.offsets[layer_num + 1][0]
+                        offset_y = self.offsets[layer_num + 1][1]
+
+                        if self.filler[layer_num][y][x]:
+                            print()
+                        elif (y - offset_y) >= kernel_y or (x - offset_x) >= kernel_x:
                             group.learning_off([1])
-                            group.weights_from[1] = neuron_groups[y % field_y][x % field_x]
+                            group.weights_from[1] = neuron_groups[(y - offset_y) % stride_y][(x - offset_x) % stride_x]
 
     def save_weights(self, folder_name):
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
@@ -437,8 +442,8 @@ class ConvNet:
                 weights = neuron_groups[0][0].weights[0]
                 np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0", weights)
             if layer_num < self.num_groups - 1:
-                for y in range(self.fields[layer_num][0]):
-                    for x in range(self.fields[layer_num][1]):
+                for y in range(self.offsets[layer_num + 1][0], self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
+                    for x in range(self.offsets[layer_num + 1][1], self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
                         weights = neuron_groups[y][x].weights[1]
                         np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1", weights)
 
@@ -447,8 +452,8 @@ class ConvNet:
             if layer_num > 0:
                 neuron_groups[0][0].weights[0] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
             if layer_num < self.num_groups - 1:
-                for y in range(self.fields[layer_num][0]):
-                    for x in range(self.fields[layer_num][1]):
+                for y in range(self.offsets[layer_num + 1][0], self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
+                    for x in range(self.offsets[layer_num + 1][1], self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
                         neuron_groups[y][x].weights[1] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
 
     def learning_off(self, layers_and_pairs):
@@ -513,67 +518,81 @@ class ConvNet:
             for boundary_num in range(num_features - 1):
                 ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
 
-        # plot weights
-        if plot_weights:
-            for layer_num, neuron_groups in enumerate(self.neuron_groups):
-                for error_pair in range(neuron_groups[0][0].num_error_pairs):
-                    if error_pair == 0 and layer_num > 0:
-                        fig, ax = plt.subplots()
-                        height = self.weight_shapes[layer_num][error_pair][0]
-                        width = self.weight_shapes[layer_num][error_pair][1]
+            # plot weights onto first error pair
+            if plot_weights and layer_num > 0:
+                fig_w1, ax_w1 = plt.subplots()
+                kernel_y = self.kernel_sizes[layer_num][0]
+                kernel_x = self.kernel_sizes[layer_num][1]
+                input_features = self.neuron_groups[layer_num - 1][0][0].num_circuits
+                output_features = self.neuron_groups[layer_num][0][0].num_circuits
 
-                        weights = neuron_groups[0][0].weights[error_pair]
-                        output_features = weights.shape[1]
-                        input_features = int(weights.shape[0] / (height * width))
+                weights_reshaped = np.zeros((input_features*kernel_y, output_features*kernel_x))
+                for input_feature in range(input_features):
+                    for output_feature in range(output_features):
+                        y_indices = [i for i in range(input_feature, kernel_y*kernel_x*input_features, input_features)]
+                        indices = [y_indices, output_feature]
+                        weights_reshaped[input_feature*kernel_y:(input_feature+1)*kernel_y, output_feature*kernel_x:(output_feature+1)*kernel_x] = neuron_groups[0][0].weights[0][indices].reshape((kernel_y, kernel_x))
 
-                        weights_reshaped = np.zeros((input_features*height, output_features*width))
-                        for output_feature in range(output_features):
-                            for input_feature in range(input_features):
-                                y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-                                indices = [y_indices, output_feature]
-                                weights_reshaped[input_feature*height:(input_feature+1)*height, output_feature*width:(output_feature+1)*width] = weights[indices].reshape((height, width))
+                ax_w1.matshow(weights_reshaped)
+                ax_w1.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                ax_w1.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                ax_w1.grid(which='minor', linestyle='solid', color='gray')
 
-                        ax.matshow(weights_reshaped)
-                        ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                        ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                        ax.grid(which='minor', linestyle='solid', color='gray')
+                for boundary_num in range(output_features - 1):
+                    ax_w1.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
+                for boundary_num in range(input_features - 1):
+                    ax_w1.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
 
-                        for boundary_num in range(output_features - 1):
-                            ax.axvline(width + width * boundary_num - 0.5, color='w')
-                        for boundary_num in range(input_features - 1):
-                            ax.axhline(height + height * boundary_num - 0.5, color='w')
+            # plot weights onto second error pair
+            if plot_weights and layer_num < self.num_groups - 1:
+                fig_w2, ax_w2 = plt.subplots()
+                kernel_y = self.kernel_sizes[layer_num + 1][0]
+                kernel_x = self.kernel_sizes[layer_num + 1][1]
+                offset_y = self.offsets[layer_num + 1][0]
+                offset_x = self.offsets[layer_num + 1][1]
+                input_features = self.neuron_groups[layer_num + 1][0][0].num_circuits
+                output_features = self.neuron_groups[layer_num][0][0].num_circuits
 
-                    if error_pair == 1 and layer_num < self.num_groups - 1:
-                        fig, ax = plt.subplots()
-                        height = self.weight_shapes[layer_num][error_pair][0]
-                        width = self.weight_shapes[layer_num][error_pair][1]
+                weights_reshaped = np.zeros((input_features*kernel_y, output_features*kernel_x))
 
-                        weights = neuron_groups[0][0].weights[error_pair]
-                        output_features = weights.shape[1]
-                        input_features = int(weights.shape[0] / (height * width))
+                for input_feature in range(input_features):
+                    for output_feature in range(output_features):
+                        for y in range(kernel_y):
+                            for x in range(kernel_x):
+                                weights_reshaped[input_feature*kernel_y + y, output_feature*kernel_x + x] = self.neuron_groups[layer_num][y + offset_y][x + offset_x].weights[1][input_feature, output_feature]
 
-                        full_height = height * self.fields[layer_num][0]
-                        full_width = width * self.fields[layer_num][1]
-                        weights_reshaped = np.zeros((input_features * full_height, output_features * full_width))
+            # # plot weights onto second error pair
+            # if plot_weights and layer_num < self.num_groups - 1:
+            #     fig, ax = plt.subplots()
+            #     kernel_y = self.kernel_sizes[layer_num + 1][0]
+            #     kernel_x = self.kernel_sizes[layer_num + 1][1]
+            #
+            #     weights = neuron_groups[0][0].weights[error_pair]
+            #     output_features = weights.shape[1]
+            #     input_features = int(weights.shape[0] / (height * width))
+            #
+            #     full_height = height * self.fields[layer_num][0]
+            #     full_width = width * self.fields[layer_num][1]
+            #     weights_reshaped = np.zeros((input_features * full_height, output_features * full_width))
+            #
+            #     for output_feature in range(output_features):
+            #         for input_feature in range(input_features):
+            #             y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
+            #             indices = [y_indices, output_feature]
+            #             for y in range(self.fields[layer_num][0]):
+            #                 for x in range(self.fields[layer_num][1]):
+            #                     weights_reshaped[full_height*input_feature + y*height:full_height*input_feature + (y+1)*height, full_width*output_feature + x*width:full_width*output_feature + (x+1)*width] = neuron_groups[y][x].weights[error_pair][indices].reshape((height, width))
 
-                        for output_feature in range(output_features):
-                            for input_feature in range(input_features):
-                                y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-                                indices = [y_indices, output_feature]
-                                for y in range(self.fields[layer_num][0]):
-                                    for x in range(self.fields[layer_num][1]):
-                                        weights_reshaped[full_height*input_feature + y*height:full_height*input_feature + (y+1)*height, full_width*output_feature + x*width:full_width*output_feature + (x+1)*width] = neuron_groups[y][x].weights[error_pair][indices].reshape((height, width))
+                ax_w2.matshow(weights_reshaped)
+                ax_w2.matshow(weights_reshaped)
+                ax_w2.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+                ax_w2.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+                ax_w2.grid(which='minor', linestyle='solid', color='gray')
 
-                        ax.matshow(weights_reshaped)
-                        ax.matshow(weights_reshaped)
-                        ax.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                        ax.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                        ax.grid(which='minor', linestyle='solid', color='gray')
-
-                        for boundary_num in range(output_features - 1):
-                            ax.axvline(full_width + full_width * boundary_num - 0.5, color='w')
-                        for boundary_num in range(input_features - 1):
-                            ax.axhline(full_height + full_height * boundary_num - 0.5, color='w')
+                for boundary_num in range(output_features - 1):
+                    ax_w2.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
+                for boundary_num in range(input_features - 1):
+                    ax_w2.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
 
         if show:
             plt.show()

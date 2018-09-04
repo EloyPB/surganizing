@@ -43,10 +43,10 @@ from surganizing1b import ConvNet
 
 learn = True
 
-image_shape = (14, 10)
+image_shape = (28, 10)
 net = ConvNet(image_shape[0], image_shape[1])
-net.stack_layer('m', num_features=2, kernel=(1, 1), stride=(1, 1), field=(14, 10), freeze_threshold=100, learning_rate=0.0005)
-net.stack_layer('s', num_features=4, kernel=(14, 10), stride=(14, 10), freeze_threshold=100, learning_rate=0.0005)
+net.stack_layer('m', num_features=2, kernel_size=(1, 1), stride=(1, 1), freeze_threshold=100, learning_rate=0.0005)
+net.stack_layer('s', num_features=4, kernel_size=(10, 6), stride=(14, 10), offset=(2, 2), freeze_threshold=100, learning_rate=0.0005)
 net.initialize()
 net.share_weights()
 
@@ -57,23 +57,22 @@ if learn:
     start_time = time.time()
     input_image = np.zeros(image_shape)
     input_image[0:14, 0:10] = zero[0:14, 0:10]
-    net.run(input_image, 3000, 2)
+    net.run(input_image, 3, 2)
     net.plot(show=True, plot_weights=True)
-    input_image = np.zeros(image_shape)
-    net.run(input_image, 200, 2)
-    input_image[0:14, 0:10] = two
-    net.run(input_image, 3000, 2)
+
+    # input_image = np.zeros(image_shape)
+    # net.run(input_image, 200, 2)
+    # input_image[14:28, 0:10] = two[0:14, 0:10]
+    # net.run(input_image, 3000, 2)
     print(time.time() - start_time)
     net.save_weights('weights')
 else:
     net.load_weights('weights')
 
-input_image = np.zeros(image_shape)
-input_image[0:14, 0:10] = zero[0:14, 0:10]
-#input_image[10:] = two
-net.learning_off(((0, (0, 1)), (1, (0,))))
-net.run(input_image, 100, 2)
-
-
-print("plotting...")
-net.plot(show=True, plot_weights=True)
+# input_image = np.zeros(image_shape)
+# input_image[0:14, 0:10] = zero[0:14, 0:10]
+# net.learning_off(((0, (0, 1)), (1, (0,))))
+# net.run(input_image, 100, 2)
+#
+# print("plotting...")
+# net.plot(show=True, plot_weights=True)

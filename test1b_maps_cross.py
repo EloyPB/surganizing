@@ -5,13 +5,13 @@ from surganizing1b import ConvNet
 learn = True
 
 net = ConvNet(6, 3)
-net.stack_layer('m', num_features=2, kernel_height=1, kernel_width=1, stride_y=1, stride_x=1, field=(3, 3))
-net.stack_layer('s', num_features=4, kernel_height=3, kernel_width=3, stride_y=3, stride_x=3)
+net.stack_layer('m', num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('s', num_features=4, kernel_size=(3, 3), stride=(3, 3))
 net.initialize()
 net.share_weights()
 
-cross = np.array([[1, 0, 1],[0, 1, 0],[1, 0, 1]])
-plus = np.array([[0, 1, 0],[1, 1, 1],[0, 1, 0]])
+cross = np.array([[1, 0, 1], [0, 1, 0], [1, 0, 1]])
+plus = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
 
 if learn:
     start_time = time.time()
