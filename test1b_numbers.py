@@ -11,10 +11,10 @@ weights_folder_name = 'weights_hardcoded'
 image_size = (70, 10)
 
 net = ConvNet(image_size[0], image_size[1])
-net.stack_layer('pixels', num_features=2, kernel_height=1, kernel_width=1, stride_y=1, stride_x=1, field=(1, 1))
-net.stack_layer('macropixels', num_features=2, kernel_height=2, kernel_width=2, stride_y=1, stride_x=1, field=(14, 10), learning_rate=0.0005)
-net.stack_layer('symbols', num_features=6, kernel_height=14, kernel_width=10, stride_y=14, stride_x=10, field=(5, 1), learning_rate=0.0005)
-net.stack_layer('operations', num_features=3, kernel_height=5, kernel_width=1, stride_y=5, stride_x=1)
+net.stack_layer('pixels', num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('macropixels', num_features=2, kernel_size=(2, 2), stride=(1, 1), learning_rate=0.0005)
+net.stack_layer('symbols', num_features=6, kernel_size=(10, 6), stride=(14, 10), learning_rate=0.0005)
+net.stack_layer('operations', num_features=3, kernel_size=(5, 1), stride=(5, 1))
 net.initialize()
 net.share_weights()
 

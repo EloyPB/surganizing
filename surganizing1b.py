@@ -434,7 +434,7 @@ class ConvNet:
                             print()
                         elif (y - offset_y) >= kernel_y or (x - offset_x) >= kernel_x:
                             group.learning_off([1])
-                            group.weights_from[1] = neuron_groups[(y - offset_y) % stride_y][(x - offset_x) % stride_x]
+                            group.weights_from[1] = neuron_groups[(y - offset_y) % stride_y + offset_y][(x - offset_x) % stride_x + offset_x]
 
     def save_weights(self, folder_name):
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
@@ -560,28 +560,6 @@ class ConvNet:
                         for y in range(kernel_y):
                             for x in range(kernel_x):
                                 weights_reshaped[input_feature*kernel_y + y, output_feature*kernel_x + x] = self.neuron_groups[layer_num][y + offset_y][x + offset_x].weights[1][input_feature, output_feature]
-
-            # # plot weights onto second error pair
-            # if plot_weights and layer_num < self.num_groups - 1:
-            #     fig, ax = plt.subplots()
-            #     kernel_y = self.kernel_sizes[layer_num + 1][0]
-            #     kernel_x = self.kernel_sizes[layer_num + 1][1]
-            #
-            #     weights = neuron_groups[0][0].weights[error_pair]
-            #     output_features = weights.shape[1]
-            #     input_features = int(weights.shape[0] / (height * width))
-            #
-            #     full_height = height * self.fields[layer_num][0]
-            #     full_width = width * self.fields[layer_num][1]
-            #     weights_reshaped = np.zeros((input_features * full_height, output_features * full_width))
-            #
-            #     for output_feature in range(output_features):
-            #         for input_feature in range(input_features):
-            #             y_indices = [i for i in range(input_feature, weights.shape[0], input_features)]
-            #             indices = [y_indices, output_feature]
-            #             for y in range(self.fields[layer_num][0]):
-            #                 for x in range(self.fields[layer_num][1]):
-            #                     weights_reshaped[full_height*input_feature + y*height:full_height*input_feature + (y+1)*height, full_width*output_feature + x*width:full_width*output_feature + (x+1)*width] = neuron_groups[y][x].weights[error_pair][indices].reshape((height, width))
 
                 ax_w2.matshow(weights_reshaped)
                 ax_w2.matshow(weights_reshaped)
