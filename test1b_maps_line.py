@@ -5,8 +5,8 @@ from surganizing1b import ConvNet
 learn = True
 
 net = ConvNet(10, 5)
-net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1), learning_rate=0.001)
-net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1), learning_rate=0.001)
+net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1))
 net.initialize()
 net.share_weights()
 

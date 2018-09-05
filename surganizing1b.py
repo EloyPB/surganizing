@@ -469,8 +469,11 @@ class ConvNet:
         external_input[:, :, 0, 1] = 1 - input_image
         return external_input
 
-    def run(self, input_image, simulation_steps=1, layers=0):
-        external_input = self.black_and_white(input_image)
+    def run(self, input_image=None, simulation_steps=1, layers=0):
+        if input_image is not None:
+            external_input = self.black_and_white(input_image)
+        else:
+            external_input = np.zeros((self.image_height, self.image_width, 2, 2))
         if layers == 0:
             layers = self.num_groups
         for step_num in range(simulation_steps):
@@ -533,10 +536,12 @@ class ConvNet:
                         indices = [y_indices, output_feature]
                         weights_reshaped[input_feature*kernel_y:(input_feature+1)*kernel_y, output_feature*kernel_x:(output_feature+1)*kernel_x] = neuron_groups[0][0].weights[0][indices].reshape((kernel_y, kernel_x))
 
-                ax_w1.matshow(weights_reshaped)
+                plot1 = ax_w1.matshow(weights_reshaped)
                 ax_w1.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
                 ax_w1.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
                 ax_w1.grid(which='minor', linestyle='solid', color='gray')
+                ax_w1.set_title("Weights onto first error pair of '" + self.group_names[layer_num] + "'")
+                fig_w1.colorbar(plot1, ax=ax_w1)
 
                 for boundary_num in range(output_features - 1):
                     ax_w1.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
@@ -561,11 +566,12 @@ class ConvNet:
                             for x in range(kernel_x):
                                 weights_reshaped[input_feature*kernel_y + y, output_feature*kernel_x + x] = self.neuron_groups[layer_num][y + offset_y][x + offset_x].weights[1][input_feature, output_feature]
 
-                ax_w2.matshow(weights_reshaped)
-                ax_w2.matshow(weights_reshaped)
+                plot2 = ax_w2.matshow(weights_reshaped)
                 ax_w2.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
                 ax_w2.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
                 ax_w2.grid(which='minor', linestyle='solid', color='gray')
+                ax_w1.set_title("Weights onto second error pair of '" + self.group_names[layer_num] + "'")
+                fig_w2.colorbar(plot2, ax=ax_w2)
 
                 for boundary_num in range(output_features - 1):
                     ax_w2.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
