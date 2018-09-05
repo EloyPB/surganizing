@@ -492,6 +492,24 @@ class ConvNet:
         greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
         blues = colors.LinearSegmentedColormap.from_list('blues', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
 
+        def pretty_weights(group_name, error_pair):
+            fig_w, ax_w = plt.subplots()
+            plot = ax_w.matshow(weights_reshaped)
+            ax_w.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
+            ax_w.set_xticks([i for i in range(weights_reshaped.shape[1])])
+            ax_w.set_xticklabels([i for i in range(kernel_x)] * output_features)
+            ax_w.xaxis.set_ticks_position('bottom')
+            ax_w.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
+            ax_w.set_yticks([i for i in range(weights_reshaped.shape[0])])
+            ax_w.set_yticklabels([i for i in range(kernel_y)] * input_features)
+            ax_w.grid(which='minor', linestyle='solid', color='gray')
+            ax_w.set_title("Weights onto the " + error_pair + " error pair of '" + group_name + "'")
+            fig_w.colorbar(plot, ax=ax_w)
+
+            for boundary_num in range(output_features - 1):
+                ax_w.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
+            for boundary_num in range(input_features - 1):
+                ax_w.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
         fig, ax = plt.subplots(1, self.num_groups)
 
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
@@ -523,7 +541,6 @@ class ConvNet:
 
             # plot weights onto first error pair
             if plot_weights and layer_num > 0:
-                fig_w1, ax_w1 = plt.subplots()
                 kernel_y = self.kernel_sizes[layer_num][0]
                 kernel_x = self.kernel_sizes[layer_num][1]
                 input_features = self.neuron_groups[layer_num - 1][0][0].num_circuits
@@ -536,21 +553,10 @@ class ConvNet:
                         indices = [y_indices, output_feature]
                         weights_reshaped[input_feature*kernel_y:(input_feature+1)*kernel_y, output_feature*kernel_x:(output_feature+1)*kernel_x] = neuron_groups[0][0].weights[0][indices].reshape((kernel_y, kernel_x))
 
-                plot1 = ax_w1.matshow(weights_reshaped)
-                ax_w1.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                ax_w1.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                ax_w1.grid(which='minor', linestyle='solid', color='gray')
-                ax_w1.set_title("Weights onto first error pair of '" + self.group_names[layer_num] + "'")
-                fig_w1.colorbar(plot1, ax=ax_w1)
-
-                for boundary_num in range(output_features - 1):
-                    ax_w1.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
-                for boundary_num in range(input_features - 1):
-                    ax_w1.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
+                pretty_weights(self.group_names[layer_num], 'first')
 
             # plot weights onto second error pair
             if plot_weights and layer_num < self.num_groups - 1:
-                fig_w2, ax_w2 = plt.subplots()
                 kernel_y = self.kernel_sizes[layer_num + 1][0]
                 kernel_x = self.kernel_sizes[layer_num + 1][1]
                 offset_y = self.offsets[layer_num + 1][0]
@@ -566,17 +572,34 @@ class ConvNet:
                             for x in range(kernel_x):
                                 weights_reshaped[input_feature*kernel_y + y, output_feature*kernel_x + x] = self.neuron_groups[layer_num][y + offset_y][x + offset_x].weights[1][input_feature, output_feature]
 
-                plot2 = ax_w2.matshow(weights_reshaped)
-                ax_w2.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-                ax_w2.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-                ax_w2.grid(which='minor', linestyle='solid', color='gray')
-                ax_w1.set_title("Weights onto second error pair of '" + self.group_names[layer_num] + "'")
-                fig_w2.colorbar(plot2, ax=ax_w2)
+                pretty_weights(self.group_names[layer_num], 'second')
 
-                for boundary_num in range(output_features - 1):
-                    ax_w2.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
-                for boundary_num in range(input_features - 1):
-                    ax_w2.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
+        # plot colorbars in the activations figure
+        fig.subplots_adjust(right=0.82)
+        gradient = np.linspace(0, 1, 100).reshape(100, 1)
+
+        ax_position = ax[0].get_position()
+        y_span = ax_position.height
+
+        def pretty_color_bar(axes, color_map, label):
+            axes.imshow(gradient, cmap=color_map, aspect='auto', origin='lower')
+            axes.axes.set_ylabel(label)
+            axes.yaxis.set_label_position("right")
+            axes.axes.get_xaxis().set_visible(False)
+            axes.yaxis.tick_right()
+            axes.yaxis.set_ticks([-0.5, 49.5, 99.5])
+            axes.yaxis.set_ticklabels(np.linspace(0, 1, 3))
+
+        p_cbar_ax = fig.add_axes([0.87, ax_position.y0, 0.015, y_span * 4 / 15])
+        pretty_color_bar(p_cbar_ax, reds, "positive error")
+
+        pos = ax_position.y0 + y_span * 4 / 15 + y_span / 10
+        n_cbar_ax = fig.add_axes([0.87, pos, 0.015, y_span * 4 / 15])
+        pretty_color_bar(n_cbar_ax, greens, "negative error")
+
+        pos += y_span * 4 / 15 + y_span / 10
+        h_cbar_ax = fig.add_axes([0.87, pos, 0.015, y_span * 4 / 15])
+        pretty_color_bar(h_cbar_ax, blues, "head")
 
         if show:
             plt.show()

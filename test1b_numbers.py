@@ -49,6 +49,6 @@ if test:
     net.learning_off(((0, (0, 1)), (1, (0, 1), (2, (0,)))))
     for symbol_to_learn in symbols_to_learn:
         input_image = symbols[symbol_to_learn]
-        net.run(input_image, simulation_steps=100, layers=2)
+        net.run(input_image, simulation_steps=10, layers=2)
         net.plot(show=True, plot_weights=True)
 
