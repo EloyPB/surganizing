@@ -326,6 +326,14 @@ class NeuronGroup:
             plt.show()
 
 
+class Dummy:
+    """Used for connecting to filler groups"""
+    def __init__(self):
+        self.num_circuits = 1
+        self.names = ["dummy"]
+        self.head_external = np.ones(1)
+
+
 class ConvNet:
     def __init__(self, image_height, image_width):
         self.image_height = image_height
@@ -337,6 +345,7 @@ class ConvNet:
         self.kernel_sizes = []
         self.offsets = []
         self.filler = []
+        self.dummy = Dummy()
 
     def stack_layer(self, name, num_features, kernel_size, stride, offset=(0, 0), 
                     pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0), time_constant=20,  learning_rate=0.01,
@@ -404,6 +413,8 @@ class ConvNet:
                         for y_out in range(first_y_out, last_y_out):
                             for x_out in range(first_x_out, last_x_out):
                                 self.neuron_groups[-1][y_in][x_in].enable_connections([neuron_groups[y_out][x_out]], 1)
+                    else:
+                        self.neuron_groups[-1][y_in][x_in].enable_connections([self.dummy], 1)
 
         self.neuron_groups.append(neuron_groups)
         print("Created layer " + name + " of size: (" + str(len(neuron_groups)) + ", " + str(len(neuron_groups[0])) + ")")
@@ -431,7 +442,11 @@ class ConvNet:
                         offset_y = self.offsets[layer_num + 1][1]
 
                         if self.filler[layer_num][y][x]:
-                            print()
+                            y_filler = np.where(self.filler[layer_num])[0][0]
+                            x_filler = np.where(self.filler[layer_num])[1][0]
+                            if y != y_filler or x != y_filler:
+                                group.learning_off([1])
+                                group.weights_from[1] = neuron_groups[y_filler][x_filler]
                         elif (y - offset_y) >= kernel_y or (x - offset_x) >= kernel_x:
                             group.learning_off([1])
                             group.weights_from[1] = neuron_groups[(y - offset_y) % stride_y + offset_y][(x - offset_x) % stride_x + offset_x]
@@ -439,22 +454,29 @@ class ConvNet:
     def save_weights(self, folder_name):
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
             if layer_num > 0:
-                weights = neuron_groups[0][0].weights[0]
-                np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0", weights)
+                neuron_groups[0][0].weights[0].dump(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
             if layer_num < self.num_groups - 1:
                 for y in range(self.offsets[layer_num + 1][0], self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
                     for x in range(self.offsets[layer_num + 1][1], self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
-                        weights = neuron_groups[y][x].weights[1]
-                        np.savetxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1", weights)
+                        neuron_groups[y][x].weights[1].dump(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
+                if self.filler[layer_num].any():
+                    y_filler = np.where(self.filler[layer_num])[0][0]
+                    x_filler = np.where(self.filler[layer_num])[1][0]
+                    neuron_groups[y_filler][x_filler].weights[1].dump(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(x_filler) + ")_1")
 
     def load_weights(self, folder_name):
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
             if layer_num > 0:
-                neuron_groups[0][0].weights[0] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
+                neuron_groups[0][0].weights[0] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
             if layer_num < self.num_groups - 1:
                 for y in range(self.offsets[layer_num + 1][0], self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
                     for x in range(self.offsets[layer_num + 1][1], self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
-                        neuron_groups[y][x].weights[1] = np.loadtxt(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
+                        neuron_groups[y][x].weights[1] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
+                if self.filler[layer_num].any():
+                    y_filler = np.where(self.filler[layer_num])[0][0]
+                    x_filler = np.where(self.filler[layer_num])[1][0]
+                    for y, x in zip(np.where(self.filler[layer_num])[0], np.where(self.filler[layer_num])[1]):
+                        neuron_groups[y][x].weights[1] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(x_filler) + ")_1")
 
     def learning_off(self, layers_and_pairs):
         for layer_and_pairs in layers_and_pairs:
