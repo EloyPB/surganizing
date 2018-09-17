@@ -208,8 +208,8 @@ class NeuronGroup:
 
         # update activity of head neuron
         self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise() +
-                      np.dot(self.neg_error_to_head, self.neg_error_out)
-                      - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
+                                 np.dot(self.neg_error_to_head, self.neg_error_out)
+                                 - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
         self.head_out = np.clip(np.tanh(self.k*self.head), 0, a_max=None)
@@ -222,7 +222,7 @@ class NeuronGroup:
         # self.i += 1
         # self.head_external = self.head_out * self.nn
 
-        self.head_external = np.where(self.head > 0.8, 1, 0)
+        self.head_external = np.where(self.head > 0.5, 1, 0)
 
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
         if external_input is not None:
@@ -464,19 +464,28 @@ class ConvNet:
                     x_filler = np.where(self.filler[layer_num])[1][0]
                     neuron_groups[y_filler][x_filler].weights[1].dump(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(x_filler) + ")_1")
 
-    def load_weights(self, folder_name):
-        for layer_num, neuron_groups in enumerate(self.neuron_groups):
-            if layer_num > 0:
-                neuron_groups[0][0].weights[0] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
-            if layer_num < self.num_groups - 1:
-                for y in range(self.offsets[layer_num + 1][0], self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
-                    for x in range(self.offsets[layer_num + 1][1], self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
-                        neuron_groups[y][x].weights[1] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
-                if self.filler[layer_num].any():
-                    y_filler = np.where(self.filler[layer_num])[0][0]
-                    x_filler = np.where(self.filler[layer_num])[1][0]
-                    for y, x in zip(np.where(self.filler[layer_num])[0], np.where(self.filler[layer_num])[1]):
-                        neuron_groups[y][x].weights[1] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(x_filler) + ")_1")
+    def load_weights(self, folder_name, layers_and_weights="all"):
+        if layers_and_weights == "all":
+            layers_and_weights = [[group_num, [0, 1]] for group_num in range(self.num_groups)]
+        for layer_and_weights in layers_and_weights:
+            layer_num = layer_and_weights[0]
+            for error_pair in layer_and_weights[1]:
+                if error_pair == 0 and layer_num > 0:
+                    self.neuron_groups[layer_num][0][0].weights[0] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
+                elif error_pair == 1 and layer_num < self.num_groups - 1:
+                    for y in range(self.offsets[layer_num + 1][0],
+                                   self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
+                        for x in range(self.offsets[layer_num + 1][1],
+                                       self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
+                            self.neuron_groups[layer_num][y][x].weights[1] = np.load(
+                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
+                    if self.filler[layer_num].any():
+                        y_filler = np.where(self.filler[layer_num])[0][0]
+                        x_filler = np.where(self.filler[layer_num])[1][0]
+                        for y, x in zip(np.where(self.filler[layer_num])[0], np.where(self.filler[layer_num])[1]):
+                            self.neuron_groups[layer_num][y][x].weights[1] = np.load(
+                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(
+                                    x_filler) + ")_1")
 
     def learning_off(self, layers_and_pairs):
         for layer_and_pairs in layers_and_pairs:

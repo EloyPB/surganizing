@@ -2,7 +2,7 @@ import numpy as np
 from os import listdir
 from surganizing1b import ConvNet
 
-learn = [1, 1]
+learn = [0, 0]
 training_rounds = 1
 weights_folder = 'weights_numbers'
 symbols_to_learn = ['0', '1', '2', '=', '+']
