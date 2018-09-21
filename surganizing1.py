@@ -1,3 +1,5 @@
+# neuron groups, feature maps and convolutional nets
+
 import numpy as np
 from matplotlib import pyplot as plt
 from copy import deepcopy

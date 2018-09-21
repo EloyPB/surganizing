@@ -12,7 +12,7 @@ image_shape = (14, 10)
 net = ConvNet(image_shape[0], image_shape[1])
 net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1), learning_rate=0.001)
 net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1), learning_rate=0.0005, dendrite_threshold=0.9, log_head=True)
+net.stack_layer('s', num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1), learning_rate=0.0005, dendrite_threshold=0.9)
 net.initialize()
 net.share_weights()
 
