@@ -42,7 +42,7 @@ if test:
     net.load_weights(weights_folder_name)
     net.learning_off(((0, (0, 1)), (1, (0, 1)), (2, (0, 1)), (3, (0, 1))))
 
-    test_examples = [['1', '+', '0', '=', '0']]
+    test_examples = [['1', '+', '0', '=', '1']]
     blank_image = np.zeros(image_size)
     num_steps = 200
 

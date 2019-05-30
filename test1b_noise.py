@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from surganizing1b import NeuronGroup
+from surganizing1b import CircuitGroup
 
 
 sizes = [2, 2, 2]
@@ -16,17 +16,17 @@ log_noise_amplitude = False
 log_weights = True
 log_s_diff = False
 
-A = NeuronGroup(name="A", num_circuits=sizes[0], num_error_pairs=s_pairs[0], pos_error_to_head=pos_error_to_head[0],
-                neg_error_to_head=neg_error_to_head[0], normalize_weights=normalize_weights[0], dendrite_threshold=0,
-                time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
+A = CircuitGroup(name="A", num_circuits=sizes[0], num_error_pairs=s_pairs[0], pos_error_to_head=pos_error_to_head[0],
+                 neg_error_to_head=neg_error_to_head[0], normalize_weights=normalize_weights[0], dendrite_threshold=0,
+                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
-B = NeuronGroup(name="B", num_circuits=sizes[1], num_error_pairs=s_pairs[1], pos_error_to_head=pos_error_to_head[1],
-                neg_error_to_head=neg_error_to_head[1], normalize_weights=normalize_weights[1],  dendrite_threshold=0,
-                time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
+B = CircuitGroup(name="B", num_circuits=sizes[1], num_error_pairs=s_pairs[1], pos_error_to_head=pos_error_to_head[1],
+                 neg_error_to_head=neg_error_to_head[1], normalize_weights=normalize_weights[1], dendrite_threshold=0,
+                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
-C = NeuronGroup(name="C", num_circuits=sizes[2], num_error_pairs=s_pairs[2], pos_error_to_head=pos_error_to_head[2],
-                neg_error_to_head=neg_error_to_head[2], normalize_weights=normalize_weights[2], dendrite_threshold=0,
-                time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
+C = CircuitGroup(name="C", num_circuits=sizes[2], num_error_pairs=s_pairs[2], pos_error_to_head=pos_error_to_head[2],
+                 neg_error_to_head=neg_error_to_head[2], normalize_weights=normalize_weights[2], dendrite_threshold=0,
+                 time_constant=time_constant, noise_max_amplitude=max_noise_amplitude)
 
 A.enable_connections(input_groups=[B, C], target_error_pair=1)
 A.initialize_weights()

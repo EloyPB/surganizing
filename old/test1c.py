@@ -1,5 +1,5 @@
 import numpy as np
-from surganizing1c import ConvNet
+from old.surganizing1c import ConvNet
 
 
 net = ConvNet(3, 3)

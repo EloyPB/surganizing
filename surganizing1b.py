@@ -5,17 +5,35 @@ from matplotlib import pyplot as plt
 from matplotlib import colors
 
 
-class NeuronGroup:
-    """Initialization function"""
-    def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
-                 normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15, noise_rise_rate=0.0000002,
-                 noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3, freeze_threshold=0.02,
-                 log_head=False, log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
-                 log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
+class CircuitGroup:
+    """Group of mismatch detection neural circuits.
 
-        self.name = name  # name of the neuron group
+    Attributes:
+        name (string): Name of the group.
+        names (list(string)): Names of each of the circuits in the group.
+        num_circuits (int): Number of circuits.
+        num_error_pairs (int): Number of error pairs per circuit.
+        pos_error_to_head (list(int)): Weights from the positive error unit to the head unit, for each error pair.
+        neg_error_to_head (list(int)): Weights from the negative error unit to the head unit, for each error pair.
+        normalize_weights (list(int)): Index of the error pairs for which incoming weights are normalized to 1.
+        time_constant (float): Time constant for the dynamics of the units.
+        fast_time_constant (float): Time constant for the dynamics of fast units.
+        default_learning_rate (float): Default learning rate.
+        learning_rates (list(float)): Current learning rate for each of the error pairs.
+
+
+
+    """
+    def __init__(self, name, num_circuits, num_error_pairs=2, pos_error_to_head=(1, 0), neg_error_to_head=(0.5, 0),
+                 normalize_weights=(0,), time_constant=20, learning_rate=0.005, noise_max_amplitude=0.15,
+                 noise_rise_rate=0.0000002, noise_fall_rate=0.0002, noise_fall_threshold=0.5,  dendrite_threshold=2/3,
+                 freeze_threshold=0.02, log_head=False, log_head_out=True, log_neg_error=False,
+                 log_neg_error_diff=False, log_neg_error_out=True, log_pos_error_out=True, log_weights=True,
+                 log_noise_amplitude=False):
+
+        self.name = name
         self.names = [name + '_' + str(circuit_num) for circuit_num in range(num_circuits)]
-        self.num_circuits = num_circuits  # number of mismatch detection circuits in the neuron group
+        self.num_circuits = num_circuits
         self.num_error_pairs = num_error_pairs
         self.pos_error_to_head = pos_error_to_head
         self.neg_error_to_head = neg_error_to_head
@@ -23,7 +41,7 @@ class NeuronGroup:
         self.time_constant = time_constant
         self.fast_time_constant = time_constant/10
         self.default_learning_rate = learning_rate
-        self.learning_rate = [learning_rate for _ in range(num_error_pairs)]
+        self.learning_rates = [learning_rate for _ in range(num_error_pairs)]
 
         # parameters for the dendritic nonlinearity
         self.dendrite_threshold = dendrite_threshold
@@ -49,11 +67,9 @@ class NeuronGroup:
         self.head_out = np.zeros(num_circuits)
         if log_head_out:
             self.head_out_log = [np.zeros(num_circuits)]
-        self.k = 3  # constant for the activation function
+        self.activation_function_slope = 3  # constant for the activation function
 
         self.head_external = np.zeros(num_circuits)
-        self.l = 50
-        self.m = 0.8
 
         # input to negative error neurons
         self.neg_error_input = np.zeros((num_error_pairs, num_circuits))
@@ -82,7 +98,7 @@ class NeuronGroup:
         # inhibitory neuron that adds up the activity in the group
         self.inhibition = 0
 
-        # down counter for freezeing weights when s_diff is above freeze_threshold
+        # down counter for freezing weights when s_diff is above freeze_threshold
         self.freeze_count = np.zeros((num_error_pairs, num_circuits))
         self.freeze_threshold = freeze_threshold
 
@@ -92,7 +108,6 @@ class NeuronGroup:
         self.input_names = [None]*num_error_pairs
         self.weights = [None]*num_error_pairs  # list of weight matrices for each error pair
         self.weights_from = [None] * num_error_pairs  # list of neuron from which to take the weights for each pair
-        self.ones = None
         if log_weights:
             self.weights_log = [None]*num_error_pairs
 
@@ -114,19 +129,22 @@ class NeuronGroup:
         self.noise_fall_rate = noise_fall_rate
         self.noise_fall_threshold = noise_fall_threshold
 
-        # self.i = 0
-        # self.nn = 0
-
     def enable_connections(self, input_groups, target_error_pair):
-        """Enable connections from neuron groups in the list 'input_groups'
-        to the error pair number 'target_error_pair'"""
+        """Enable connections from circuit groups in the list 'input_groups' to the error pair number
+        'target_error_pair'.
+
+        Args:
+            input_groups list((CircuitsGroup)): List of input circuit groups.
+            target_error_pair (int): Index of the target error pair.
+        """
         if target_error_pair not in self.target_error_pairs:
             self.target_error_pairs.append(target_error_pair)
         for input_group in input_groups:
             self.input_groups[target_error_pair].append(input_group)
 
     def initialize_weights(self):
-        """Initialize weight matrices. Must be called after enable_connections and before step!"""
+        """Initialize weight matrices. Must be called after enable_connections and before step!
+        """
         for error_pair in self.target_error_pairs:
             input_size = 0
             input_names = []
@@ -139,10 +157,10 @@ class NeuronGroup:
             if self.log_weights:
                 self.weights_log[error_pair] = [np.zeros((input_size, self.num_circuits))]
             self.input_names[error_pair] = input_names
-            self.ones = np.ones((input_size, 1))
 
     def slow_noise(self):
-        """Produces low frequency noise"""
+        """Produces low frequency noise.
+        """
         # update noise_amplitude
         self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
                                        - self.noise_fall_rate*(self.head_out > self.noise_fall_threshold),
@@ -167,17 +185,18 @@ class NeuronGroup:
 
     def learning_off(self, error_pairs):
         for error_pair in error_pairs:
-            self.learning_rate[error_pair] = 0
+            self.learning_rates[error_pair] = 0
 
-    def learning_on(self, learning_rates=[]):
+    def learning_on(self, learning_rates=()):
         if len(learning_rates) > 0:
             for error_pair, learning_rate in enumerate(learning_rates):
-                self.learning_rate[error_pair] = learning_rate
+                self.learning_rates[error_pair] = learning_rate
         else:
-            self.learning_rate = [self.default_learning_rate for _ in range(self.num_error_pairs)]
+            self.learning_rates = [self.default_learning_rate for _ in range(self.num_error_pairs)]
 
     def step(self, external_input=None):
-        """Run one step of the simulation"""
+        """Run one step of the simulation.
+        """
         # update the down counters for freezing weights on neg_error neurons whose activity is changing fast
         # in order to block learning during transients
         self.freeze_count = np.where(np.abs(self.neg_error_diff) > self.freeze_threshold, 3*self.time_constant,
@@ -186,19 +205,19 @@ class NeuronGroup:
         # calculate inputs to neg_error neurons and update weights
         for error_pair in self.target_error_pairs:
             input_values = []
-            for module in self.input_groups[error_pair]:
-                input_values = np.append(input_values, module.head_external)
+            for input_group in self.input_groups[error_pair]:
+                input_values = np.append(input_values, input_group.head_external)
 
-            self.neg_error_input[error_pair] = self.dendrite_nonlinearity(np.dot(input_values, self.weights_from[error_pair].weights[error_pair]))
+            self.neg_error_input[error_pair] = self.dendrite_nonlinearity(
+                np.dot(input_values, self.weights_from[error_pair].weights[error_pair]))
 
-            if self.learning_rate[error_pair]:
+            if self.learning_rates[error_pair]:
                 weight_update = np.where(self.freeze_count[error_pair], 0, np.dot(input_values[:, np.newaxis],
                                                                                   - self.neg_error[error_pair][np.newaxis]))
                 if error_pair in self.normalize_weights:
                     weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
 
-                # self.weights[error_pair] = np.clip(0.99995*self.weights[error_pair] + self.learning_rate[error_pair]*weight_update, a_min=0, a_max=None)  # clip weights below 0
-                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rate[error_pair] * weight_update, a_min=0, a_max=None)  # clip weights below 0
+                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rates[error_pair] * weight_update, a_min=0, a_max=None)  # clip weights below 0
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
@@ -212,15 +231,9 @@ class NeuronGroup:
                                  - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
-        self.head_out = np.clip(np.tanh(self.k*self.head), 0, a_max=None)
+        self.head_out = np.clip(np.tanh(self.activation_function_slope * self.head), 0, a_max=None)
         if self.log_head_out:
             self.head_out_log.append(self.head_out)
-
-        # self.head_external = 1 / (1 + np.exp(-50*(self.head-0.8)))
-        # if self.i % 50 == 0:
-        #     self.nn = np.random.uniform(1, 1, self.num_circuits)
-        # self.i += 1
-        # self.head_external = self.head_out * self.nn
 
         self.head_external = np.where(self.head > 0.5, 1, 0)
 
@@ -254,7 +267,7 @@ class NeuronGroup:
                 return row, column
 
         if self.log_head or self.log_head_out or self.log_neg_error or self.log_neg_error_out or self.log_pos_error_out:
-            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True, num=self.name + ' Act')
+            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex='col', sharey='row', num=self.name + ' Act')
             fig.suptitle("Neural Circuits in Module " + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 for error_pair_num in range(self.num_error_pairs):
@@ -281,7 +294,7 @@ class NeuronGroup:
                     axes.legend(loc='lower left')
 
         if self.log_noise_amplitude:
-            fig, ax = plt.subplots(self.num_circuits, sharex=True, num=self.name + ' Noise')
+            fig, ax = plt.subplots(self.num_circuits, sharex='col', num=self.name + ' Noise')
             fig.suptitle("Noise Amplitude in Module " + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 ax[circuit_num].plot(np.array(self.noise_amplitude_log)[:, circuit_num])
@@ -289,7 +302,7 @@ class NeuronGroup:
             ax[-1].set_xlabel(x_label)
 
         if self.log_neg_error_diff:
-            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex=True, sharey=True, num=self.name + ' Diff')
+            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex='col', sharey='row', num=self.name + ' Diff')
             fig.suptitle("N(t) - N(t-1) in Module" + self.name, size='large')
             for circuit_num in range(self.num_circuits):
                 for error_pair_num in range(self.num_error_pairs):
@@ -305,7 +318,7 @@ class NeuronGroup:
                     axes.axhline(-self.freeze_threshold, linestyle=':', color='gray')
 
         if self.log_weights:
-            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex=True, sharey=True, num=self.name + ' W')
+            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex='col', sharey='row', num=self.name + ' W')
             fig.suptitle("Incoming Weights into Module " + self.name, size='large')
             for error_pair_num, error_pair in enumerate(self.target_error_pairs):
                 num_input_circuits = self.weights[error_pair].shape[0]
@@ -380,15 +393,15 @@ class ConvNet:
             row_of_groups = []
             for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
                 group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
-                new_group = NeuronGroup(group_name, num_features, num_error_pairs=2, pos_error_to_head=pos_error_to_head,
-                                        neg_error_to_head=neg_error_to_head, time_constant=time_constant,
-                                        learning_rate=learning_rate, noise_max_amplitude=noise_max_amplitude,
-                                        noise_rise_rate=noise_rise_rate, noise_fall_rate=noise_fall_rate,
-                                        noise_fall_threshold=noise_fall_threshold,  dendrite_threshold=dendrite_threshold,
-                                        freeze_threshold=freeze_threshold, log_head=log_head, log_head_out=log_head_out,
-                                        log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
-                                        log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
-                                        log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
+                new_group = CircuitGroup(group_name, num_features, num_error_pairs=2, pos_error_to_head=pos_error_to_head,
+                                         neg_error_to_head=neg_error_to_head, time_constant=time_constant,
+                                         learning_rate=learning_rate, noise_max_amplitude=noise_max_amplitude,
+                                         noise_rise_rate=noise_rise_rate, noise_fall_rate=noise_fall_rate,
+                                         noise_fall_threshold=noise_fall_threshold, dendrite_threshold=dendrite_threshold,
+                                         freeze_threshold=freeze_threshold, log_head=log_head, log_head_out=log_head_out,
+                                         log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
+                                         log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
+                                         log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
 
                 # connect previous layer to new layer
                 if len(self.neuron_groups) != 0:
@@ -471,21 +484,22 @@ class ConvNet:
             layer_num = layer_and_weights[0]
             for error_pair in layer_and_weights[1]:
                 if error_pair == 0 and layer_num > 0:
-                    self.neuron_groups[layer_num][0][0].weights[0] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
+                    self.neuron_groups[layer_num][0][0].weights[0] = np.load(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0", allow_pickle=True)
                 elif error_pair == 1 and layer_num < self.num_groups - 1:
                     for y in range(self.offsets[layer_num + 1][0],
                                    self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
                         for x in range(self.offsets[layer_num + 1][1],
                                        self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
                             self.neuron_groups[layer_num][y][x].weights[1] = np.load(
-                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1")
+                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1",
+                                allow_pickle=True)
                     if self.filler[layer_num].any():
                         y_filler = np.where(self.filler[layer_num])[0][0]
                         x_filler = np.where(self.filler[layer_num])[1][0]
                         for y, x in zip(np.where(self.filler[layer_num])[0], np.where(self.filler[layer_num])[1]):
                             self.neuron_groups[layer_num][y][x].weights[1] = np.load(
                                 folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(
-                                    x_filler) + ")_1")
+                                    x_filler) + ")_1", allow_pickle=True)
 
     def learning_off(self, layers_and_pairs):
         for layer_and_pairs in layers_and_pairs:
