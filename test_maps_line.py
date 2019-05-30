@@ -1,12 +1,13 @@
 import time
 import numpy as np
-from surganizing1b import ConvNet
+from surganizing import ConvolutionalNet
+import parameters.maps as parameters
 
 learn = True
 
-net = ConvNet(10, 5)
-net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1))
-net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net = ConvolutionalNet(10, 5)
+net.stack_layer('p', parameters, num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', parameters, num_features=2, kernel_size=(2, 2), stride=(1, 1))
 net.initialize()
 net.share_weights()
 
@@ -16,9 +17,9 @@ if learn:
     start_time = time.time()
     net.run(input_image, 3000, 2)
     print(time.time() - start_time)
-    net.save_weights('weights')
+    net.save_weights('weights/maps_line')
 else:
-    net.load_weights('weights')
+    net.load_weights('weights/maps_line')
 
 net.learning_off(((0, (0, 1)), (1, (0,))))
 input_image = np.zeros((10, 5))

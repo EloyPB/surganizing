@@ -1,23 +1,24 @@
 import numpy as np
 from os import listdir
-from surganizing1b import ConvNet
+from surganizing import ConvolutionalNet
+from parameters import operations_p, maps, operations_s
 
 learn = [0, 0]
 training_rounds = 1
-weights_folder = 'weights_numbers'
+weights_folder = 'weights/numbers'
 symbols_to_learn = ['0', '1', '2', '=', '+']
 test = 1
 
 image_shape = (14, 10)
-net = ConvNet(image_shape[0], image_shape[1])
-net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1), learning_rate=0.001)
-net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1), learning_rate=0.0005, dendrite_threshold=0.9)
+net = ConvolutionalNet(image_shape[0], image_shape[1])
+net.stack_layer('p', group_parameters=operations_p, num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', group_parameters=maps, num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net.stack_layer('s', group_parameters=operations_s, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
 net.initialize()
 net.share_weights()
 
 symbols = {}
-symbols_folder_name = 'symbols'
+symbols_folder_name = 'symbols/math 14x10'
 for symbol in listdir(symbols_folder_name):
     symbols[symbol] = np.loadtxt(symbols_folder_name + '/' + symbol)
 

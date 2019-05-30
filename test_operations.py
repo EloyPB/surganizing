@@ -1,25 +1,26 @@
 import time
 import numpy as np
 from os import listdir
-from surganizing1b import ConvNet
+from surganizing import ConvolutionalNet
+from parameters import operations_p, maps, operations_s
 
 
 train = 0
 test = 1
-weights_folder_name = 'weights_operations'
+weights_folder_name = 'weights/operations'
 
 image_size = (70, 10)
 
-net = ConvNet(image_size[0], image_size[1])
-net.stack_layer('p', num_features=2, kernel_size=(1, 1), stride=(1, 1), learning_rate=0.001)
-net.stack_layer('m', num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1), learning_rate=0.0005, dendrite_threshold=0.9, log_head=True)
-net.stack_layer('o', num_features=3, kernel_size=(5, 1), stride=(5, 1))
+net = ConvolutionalNet(image_size[0], image_size[1])
+net.stack_layer('p', group_parameters=operations_p, num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', group_parameters=maps, num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net.stack_layer('s', group_parameters=operations_s, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1), log_head=True)
+net.stack_layer('o', group_parameters=maps, num_features=3, kernel_size=(5, 1), stride=(5, 1))
 net.initialize()
 net.share_weights()
 
 symbols = {}
-symbols_folder_name = 'symbols'
+symbols_folder_name = 'symbols/math 14x10'
 for symbol in listdir(symbols_folder_name):
     symbols[symbol] = np.loadtxt(symbols_folder_name + '/' + symbol)
 

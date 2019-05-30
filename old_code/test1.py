@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from old.surganizing1 import NeuronGroup
+from old_code.surganizing1 import NeuronGroup
 
 
 sizes = [4, 4]
