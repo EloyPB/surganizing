@@ -1,8 +1,9 @@
 time_constant = 20
-fast_time_constant = time_constant/10
+time_constant_inhibition = time_constant/10
+time_constant_error = time_constant/10
+neg_error_delay = 3*time_constant
 
 learning_rate = 0.001
-freeze_threshold = 0.02
 
 dendrite_threshold = 3/4
 activation_function_slope = 3

@@ -2,6 +2,7 @@ import math
 import sys
 import os
 import numpy as np
+from collections import deque
 from matplotlib import pyplot as plt
 from matplotlib import colors
 
@@ -18,7 +19,7 @@ class CircuitGroup:
         neg_error_to_head (list(int)): Weights from the negative error unit to the head unit, for each error pair.
         weight_normalizing_pairs (list(int)): Index of the error pairs for which incoming weights are normalized to 1.
         time_constant (float): Time constant for the dynamics of the units.
-        fast_time_constant (float): Time constant for the dynamics of fast units.
+        time_constant_inhibition (float): Time constant for the dynamics of fast units.
         default_learning_rate (float): Default learning rate.
         learning_rates (list(float)): Current learning rate for each of the error pairs.
     """
@@ -40,7 +41,8 @@ class CircuitGroup:
         self.pos_error_to_head = None
 
         self.time_constant = parameters.time_constant
-        self.fast_time_constant = parameters.fast_time_constant
+        self.time_constant_inhibition = parameters.time_constant_inhibition
+        self.time_constant_error = parameters.time_constant_error
 
         self.default_learning_rate = parameters.learning_rate
         self.learning_rates = [self.default_learning_rate for _ in range(num_error_pairs)]
@@ -82,10 +84,9 @@ class CircuitGroup:
         if log_neg_error:
             self.neg_error_log = [np.zeros((num_error_pairs, num_circuits))]
 
-        # neg_error(t) - neg_error(t-1), will be used to freeze learning during transients
-        self.neg_error_diff = np.zeros((num_error_pairs, num_circuits))
-        if log_neg_error_diff:
-            self.neg_error_diff_log = [np.zeros((num_error_pairs, num_circuits))]
+        self.neg_error_queue = deque([np.zeros((num_error_pairs, num_circuits))
+                                      for _ in range(parameters.neg_error_delay)])
+        self.valid_neg_error = None
 
         # neg_error neurons output after clipping between 0 and 1
         self.neg_error_out = np.zeros((num_error_pairs, num_circuits))
@@ -100,10 +101,6 @@ class CircuitGroup:
 
         # inhibitory neuron that adds up the activity in the group
         self.inhibition = 0
-
-        # down counter for freezing weights when s_diff is above freeze_threshold
-        self.freeze_count = np.zeros((num_error_pairs, num_circuits))
-        self.freeze_threshold = parameters.freeze_threshold
 
         self.target_error_pairs = []  # list of error pairs that receive input from other neuron groups
         # list of lists of input neuron groups for each of the error pairs in target_error_pairs
@@ -164,7 +161,10 @@ class CircuitGroup:
         """Produces low frequency noise.
         """
         # update noise_amplitude
-        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
+        # self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
+        #                                - self.noise_fall_rate * (self.head_out > self.head_external_threshold),
+        #                                0, self.noise_max_amplitude)
+        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate * np.sum(np.abs(self.valid_neg_error))
                                        - self.noise_fall_rate * (self.head_out > self.head_external_threshold),
                                        0, self.noise_max_amplitude)
         if self.log_noise_amplitude:
@@ -175,7 +175,7 @@ class CircuitGroup:
             self.noise_step_num += 1
         else:
             self.noise_step_num = 0
-            self.noise_target = np.random.uniform(-self.noise_amplitude, self.noise_amplitude, self.num_circuits)
+            self.noise_target = np.random.uniform(0, self.noise_amplitude, self.num_circuits)
 
         # low-pass filter the noise_target
         self.noise = self.noise_smoothing_factor * self.noise + (1 - self.noise_smoothing_factor) * self.noise_target
@@ -203,12 +203,9 @@ class CircuitGroup:
     def step(self, external_input=None):
         """Run one step of the simulation.
         """
-        # update the down counters for freezing weights on neg_error neurons whose activity is changing fast
-        # in order to block learning during transients
-        self.freeze_count = np.where(np.abs(self.neg_error_diff) > self.freeze_threshold, 3*self.time_constant,
-                                     np.maximum(self.freeze_count - 1, 0))
-
         # calculate inputs to neg_error neurons and update weights
+        delayed_neg_error = self.neg_error_queue.pop()
+        self.valid_neg_error = np.minimum(np.abs(delayed_neg_error), np.abs(self.neg_error))*np.sign(self.neg_error)
         for error_pair in self.target_error_pairs:
             input_values = []
             for input_group in self.input_groups[error_pair]:
@@ -218,18 +215,18 @@ class CircuitGroup:
                 np.dot(input_values, self.weights_from[error_pair].weights[error_pair]))
 
             if self.learning_rates[error_pair]:
-                weight_update = np.where(self.freeze_count[error_pair], 0, np.dot(input_values[:, np.newaxis],
-                                                                                  - self.neg_error[error_pair][np.newaxis]))
+                weight_update = np.dot(input_values[:, np.newaxis], - self.valid_neg_error[error_pair][np.newaxis])
                 if error_pair in self.weight_normalizing_pairs:
-                    weight_update -= self.weights[error_pair]*(-input_values[:, np.newaxis] + 1)*self.neg_error_input[error_pair]
-
-                self.weights[error_pair] = np.clip(self.weights[error_pair] + self.learning_rates[error_pair] * weight_update, a_min=0, a_max=None)  # clip weights below 0
+                    weight_update -= self.weights[error_pair] * (-input_values[:, np.newaxis] + 1) * \
+                                     self.neg_error_input[error_pair]
+                learning_rate = self.learning_rates[error_pair] / max(np.sum(input_values), 1)
+                self.weights[error_pair] = np.maximum(0, self.weights[error_pair] + learning_rate * weight_update)
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
 
         # update the activity of inhibitory neuron
-        self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.fast_time_constant
+        self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.time_constant_inhibition
 
         # update activity of head neuron
         self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise() +
@@ -237,7 +234,7 @@ class CircuitGroup:
                                  - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
-        self.head_out = np.clip(np.tanh(self.activation_function_slope * self.head), 0, a_max=None)
+        self.head_out = np.maximum(np.tanh(self.activation_function_slope * self.head), 0)
         if self.log_head_out:
             self.head_out_log.append(self.head_out)
 
@@ -246,11 +243,8 @@ class CircuitGroup:
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
         if external_input is not None:
             neg_error_update += external_input
-        self.neg_error_diff = -self.neg_error
-        self.neg_error = self.neg_error + neg_error_update / self.fast_time_constant
-        self.neg_error_diff += self.neg_error
-        if self.log_neg_error_diff:
-            self.neg_error_diff_log.append(self.neg_error_diff)
+        self.neg_error = self.neg_error + neg_error_update / self.time_constant_error
+        self.neg_error_queue.appendleft(self.neg_error)
         if self.log_neg_error:
             self.neg_error_log.append(self.neg_error)
         self.neg_error_out = np.clip(self.neg_error, 0, 1)
