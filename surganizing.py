@@ -86,7 +86,7 @@ class CircuitGroup:
 
         self.neg_error_queue = deque([np.zeros((num_error_pairs, num_circuits))
                                       for _ in range(parameters.neg_error_delay)])
-        self.valid_neg_error = None
+        self.valid_neg_error = np.zeros((num_error_pairs, num_circuits))
 
         # neg_error neurons output after clipping between 0 and 1
         self.neg_error_out = np.zeros((num_error_pairs, num_circuits))
@@ -157,14 +157,12 @@ class CircuitGroup:
                 self.weights_log[error_pair] = [np.zeros((input_size, self.num_circuits))]
             self.input_names[error_pair] = input_names
 
-    def slow_noise(self):
+    def slow_noise(self, error_responsible):
         """Produces low frequency noise.
         """
         # update noise_amplitude
-        # self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate
-        #                                - self.noise_fall_rate * (self.head_out > self.head_external_threshold),
-        #                                0, self.noise_max_amplitude)
-        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate * np.sum(np.abs(self.valid_neg_error))
+
+        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate * error_responsible
                                        - self.noise_fall_rate * (self.head_out > self.head_external_threshold),
                                        0, self.noise_max_amplitude)
         if self.log_noise_amplitude:
@@ -206,10 +204,14 @@ class CircuitGroup:
         # calculate inputs to neg_error neurons and update weights
         delayed_neg_error = self.neg_error_queue.pop()
         self.valid_neg_error = np.minimum(np.abs(delayed_neg_error), np.abs(self.neg_error))*np.sign(self.neg_error)
+        responsible_error = 0
         for error_pair in self.target_error_pairs:
             input_values = []
             for input_group in self.input_groups[error_pair]:
                 input_values = np.append(input_values, input_group.head_external)
+
+            if error_pair in self.weight_normalizing_pairs:
+                responsible_error += np.sum(np.abs(input_group.valid_neg_error))
 
             self.neg_error_input[error_pair] = self.dendrite_nonlinearity(
                 np.dot(input_values, self.weights_from[error_pair].weights[error_pair]))
@@ -229,7 +231,7 @@ class CircuitGroup:
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.time_constant_inhibition
 
         # update activity of head neuron
-        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise() +
+        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(responsible_error) +
                                  np.dot(self.neg_error_to_head, self.neg_error_out)
                                  - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:

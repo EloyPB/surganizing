@@ -8,15 +8,17 @@ sizes = [2, 2]
 num_error_pairs = [2, 1]
 weight_normalizing_pairs = [[0], [0]]
 
-log_amplitudes = True
 log_noise_amplitude = False
 log_weights = True
 
 A = CircuitGroup(name="A", parameters=parameters, num_circuits=sizes[0], num_error_pairs=num_error_pairs[0],
-                 weight_normalizing_pairs=weight_normalizing_pairs[0])
+                 weight_normalizing_pairs=weight_normalizing_pairs[0], log_noise_amplitude=log_noise_amplitude,
+                 log_weights=log_weights)
 
 B = CircuitGroup(name="B", parameters=parameters, num_circuits=sizes[1], num_error_pairs=num_error_pairs[1],
-                 weight_normalizing_pairs=weight_normalizing_pairs[1])
+                 weight_normalizing_pairs=weight_normalizing_pairs[1], log_noise_amplitude=log_noise_amplitude,
+                 log_weights=log_weights)
+
 
 A.enable_connections(input_groups=[B], target_error_pair=1)
 A.set_error_pair_drives([1, 0])
