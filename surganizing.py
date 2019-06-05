@@ -157,12 +157,12 @@ class CircuitGroup:
                 self.weights_log[error_pair] = [np.zeros((input_size, self.num_circuits))]
             self.input_names[error_pair] = input_names
 
-    def slow_noise(self, error_responsible):
+    def slow_noise(self, responsible_error):
         """Produces low frequency noise.
         """
         # update noise_amplitude
 
-        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate * error_responsible
+        self.noise_amplitude = np.clip(self.noise_amplitude + self.noise_rise_rate * responsible_error
                                        - self.noise_fall_rate * (self.head_out > self.head_external_threshold),
                                        0, self.noise_max_amplitude)
         if self.log_noise_amplitude:
@@ -541,24 +541,23 @@ class ConvolutionalNet:
         greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
         blues = colors.LinearSegmentedColormap.from_list('blues', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
 
-        def pretty_weights(group_name, error_pair):
+        def pretty_weights(group_name, error_pair, weights):
             fig_w, ax_w = plt.subplots()
-            plot = ax_w.matshow(weights_reshaped)
-            ax_w.set_xticks([i - 0.5 for i in range(weights_reshaped.shape[1])], minor='true')
-            ax_w.set_xticks([i for i in range(weights_reshaped.shape[1])])
+            plot = ax_w.pcolor(np.flip(weights, 0), edgecolors='gray')
+            ax_w.set_aspect('equal')
+
+            ax_w.set_xticks([i + 0.5 for i in range(weights.shape[1])])
             ax_w.set_xticklabels([i for i in range(kernel_x)] * output_features)
-            ax_w.xaxis.set_ticks_position('bottom')
-            ax_w.set_yticks([i - 0.5 for i in range(weights_reshaped.shape[0])], minor='true')
-            ax_w.set_yticks([i for i in range(weights_reshaped.shape[0])])
-            ax_w.set_yticklabels([i for i in range(kernel_y)] * input_features)
-            ax_w.grid(which='minor', linestyle='solid', color='gray')
+            ax_w.set_yticks([i + 0.5 for i in range(weights.shape[0])])
+            ax_w.set_yticklabels(list(reversed([i for i in range(kernel_y)] * input_features)))
             ax_w.set_title("Weights onto the " + error_pair + " error pair of '" + group_name + "'")
             fig_w.colorbar(plot, ax=ax_w)
 
             for boundary_num in range(output_features - 1):
-                ax_w.axvline(kernel_x + kernel_x * boundary_num - 0.5, color='w')
+                ax_w.axvline(kernel_x + kernel_x * boundary_num, color='w')
             for boundary_num in range(input_features - 1):
-                ax_w.axhline(kernel_y + kernel_y * boundary_num - 0.5, color='w')
+                ax_w.axhline(kernel_y + kernel_y * boundary_num, color='w')
+
         fig, ax = plt.subplots(1, self.num_groups)
 
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
@@ -577,16 +576,18 @@ class ConvolutionalNet:
                         neg_error_out[row_num, col_num+feature_num*width] = neuron_group.neg_error_out[-1, feature_num]
                         pos_error_out[row_num, col_num+feature_num*width] = neuron_group.pos_error_out[-1, feature_num]
 
-            ax[layer_num].matshow(head_out, cmap=blues, vmin=0, vmax=1)
-            ax[layer_num].matshow(neg_error_out, cmap=greens, vmin=0, vmax=1)
-            ax[layer_num].matshow(pos_error_out, cmap=reds, vmin=0, vmax=1)
+            ax[layer_num].pcolor(np.flip(head_out, 0), cmap=blues, vmin=0, vmax=1)
+            ax[layer_num].pcolor(np.flip(neg_error_out, 0), cmap=greens, vmin=0, vmax=1)
+            ax[layer_num].pcolor(np.flip(pos_error_out, 0), cmap=reds, vmin=0, vmax=1, edgecolors='gray')
+            ax[layer_num].set_aspect('equal')
 
-            ax[layer_num].set_xticks([i - 0.5 for i in range(width*num_features)], minor='true')
-            ax[layer_num].set_yticks([i - 0.5 for i in range(height)], minor='true')
-            ax[layer_num].grid(which='minor', linestyle='solid', color='gray')
+            ax[layer_num].set_xticks(np.arange(width*num_features) + 0.5)
+            ax[layer_num].set_xticklabels(np.arange(width*num_features))
+            ax[layer_num].set_yticks(np.arange(height) + 0.5)
+            ax[layer_num].set_yticklabels(np.flip(np.arange(height)))
 
             for boundary_num in range(num_features - 1):
-                ax[layer_num].axvline(width + width*boundary_num - 0.5, color='k')
+                ax[layer_num].axvline(width + width*boundary_num, color='k')
 
             # plot weights onto first error pair
             if plot_weights and layer_num > 0:
@@ -602,7 +603,7 @@ class ConvolutionalNet:
                         indices = (y_indices, output_feature)
                         weights_reshaped[input_feature*kernel_y:(input_feature+1)*kernel_y, output_feature*kernel_x:(output_feature+1)*kernel_x] = neuron_groups[0][0].weights[0][indices].reshape((kernel_y, kernel_x))
 
-                pretty_weights(self.group_names[layer_num], 'first')
+                pretty_weights(self.group_names[layer_num], 'first', weights_reshaped)
 
             # plot weights onto second error pair
             if plot_weights and layer_num < self.num_groups - 1:
@@ -621,7 +622,7 @@ class ConvolutionalNet:
                             for x in range(kernel_x):
                                 weights_reshaped[input_feature*kernel_y + y, output_feature*kernel_x + x] = self.neuron_groups[layer_num][y + offset_y][x + offset_x].weights[1][input_feature, output_feature]
 
-                pretty_weights(self.group_names[layer_num], 'second')
+                pretty_weights(self.group_names[layer_num], 'second', weights_reshaped)
 
         # plot colorbars in the activations figure
         fig.subplots_adjust(right=0.82)

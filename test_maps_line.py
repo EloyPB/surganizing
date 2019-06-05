@@ -1,13 +1,13 @@
 import time
 import numpy as np
 from surganizing import ConvolutionalNet
-import parameters.maps as parameters
+from parameters import pixels, macropixels
 
 learn = True
 
 net = ConvolutionalNet(10, 5)
-net.stack_layer('p', parameters, num_features=2, kernel_size=(1, 1), stride=(1, 1))
-net.stack_layer('m', parameters, num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net.stack_layer('p', pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
 net.initialize()
 net.share_weights()
 

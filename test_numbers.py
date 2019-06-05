@@ -1,7 +1,7 @@
 import numpy as np
 from os import listdir
 from surganizing import ConvolutionalNet
-from parameters import operations_p, maps, operations_s
+from parameters import pixels, macropixels, symbols
 
 learn = [0, 0]
 training_rounds = 1
@@ -11,9 +11,9 @@ test = 1
 
 image_shape = (14, 10)
 net = ConvolutionalNet(image_shape[0], image_shape[1])
-net.stack_layer('p', group_parameters=operations_p, num_features=2, kernel_size=(1, 1), stride=(1, 1))
-net.stack_layer('m', group_parameters=maps, num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', group_parameters=operations_s, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
+net.stack_layer('p', group_parameters=pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
+net.stack_layer('m', group_parameters=macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
 net.initialize()
 net.share_weights()
 

@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from surganizing import ConvolutionalNet
-import parameters.maps as parameters
+import parameters.basic as parameters
 
 learn = False
 
