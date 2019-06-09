@@ -289,13 +289,13 @@ class CircuitGroup:
                         axis.plot(np.array(self.head_out_log)[:, circuit_num], 'b', label=r'$' + self.names[circuit_num] + '.h$')
                     if self.log_neg_error:
                         axis.plot(np.array(self.neg_error_log)[:, error_pair_num, circuit_num], 'g:',
-                                              label=r'$' + self.names[circuit_num] + '.n^i_' + str(error_pair_num) + '$')
+                                  label=r'$' + self.names[circuit_num] + '.n^i_' + str(error_pair_num) + '$')
                     if self.log_neg_error_out:
                         axis.plot(np.array(self.neg_error_out_log)[:, error_pair_num, circuit_num], 'g',
-                                                  label=r'$' + self.names[circuit_num] + '.n_' + str(error_pair_num) + '$')
+                                  label=r'$' + self.names[circuit_num] + '.n_' + str(error_pair_num) + '$')
                     if self.log_pos_error_out:
                         axis.plot(np.array(self.pos_error_out_log)[:, error_pair_num, circuit_num], 'r',
-                                              label=r'$' + self.names[circuit_num] + '.p_' + str(error_pair_num) + '$')
+                                  label=r'$' + self.names[circuit_num] + '.p_' + str(error_pair_num) + '$')
                     axis.legend(loc='lower left')
 
         if self.log_noise_amplitude:
@@ -308,24 +308,9 @@ class CircuitGroup:
                 if circuit_num == self.num_circuits - 1:
                     axis.set_xlabel(x_label)
 
-        if self.log_neg_error_diff:
-            fig, ax = plt.subplots(self.num_circuits, self.num_error_pairs, sharex='col', sharey='row', num=self.name + ' Diff')
-            fig.suptitle("N(t) - N(t-1) in Module" + self.name, size='large')
-            for circuit_num in range(self.num_circuits):
-                for error_pair_num in range(self.num_error_pairs):
-                    axis = get_axis(ax, circuit_num, error_pair_num, self.num_error_pairs)
-                    if circuit_num == 0:
-                        axis.set_title("Error Pair " + str(error_pair_num), size='medium')
-                    if circuit_num == self.num_circuits-1:
-                        axis.set_xlabel(x_label)
-                    if error_pair_num == 0:
-                        axis.set_ylabel("Circuit " + str(circuit_num))
-                    axis.plot(np.array(self.neg_error_diff_log)[:, error_pair_num, circuit_num], 'r')
-                    axis.axhline(self.freeze_threshold, linestyle=':', color='gray')
-                    axis.axhline(-self.freeze_threshold, linestyle=':', color='gray')
-
         if self.log_weights:
-            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex='col', sharey='row', num=self.name + ' W')
+            fig, ax = plt.subplots(self.num_circuits, len(self.target_error_pairs), sharex='col', sharey='row',
+                                   num=self.name + ' W')
             fig.suptitle("Incoming Weights into Module " + self.name, size='large')
             for error_pair_num, error_pair in enumerate(self.target_error_pairs):
                 num_input_circuits = self.weights[error_pair].shape[0]
@@ -369,7 +354,7 @@ class ConvolutionalNet:
 
     def stack_layer(self, name, group_parameters, num_features, kernel_size, stride, offset=(0, 0), log_head=False,
                     log_head_out=False, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False,
-                    log_pos_error_out=False, log_weights=False, log_noise_amplitude=False):
+                    log_pos_error_out=False, log_weights=False, log_noise_amplitude=False, terminal=False):
 
         self.num_groups += 1
         self.group_names.append(name)
@@ -393,16 +378,18 @@ class ConvolutionalNet:
 
         # create new layer
         neuron_groups = []
+        num_error_pairs = 1 if terminal else 2
+        error_pair_drive = [1] if terminal else [1, 0]
         for y_out in range(math.ceil((input_height-offset[0])/stride[0])):
             row_of_groups = []
             for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
                 group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
-                new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs=2,
+                new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs=num_error_pairs,
                                          weight_normalizing_pairs=[0], log_head=log_head, log_head_out=log_head_out,
                                          log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
                                          log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
                                          log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
-                new_group.set_error_pair_drives([1, 0])
+                new_group.set_error_pair_drives(error_pair_drive)
                 # connect previous layer to new layer
                 if len(self.neuron_groups) != 0:
                     for y_in in range(y_out*stride[0] + offset[0], y_out*stride[0] + offset[0] + kernel_size[0]):
@@ -512,6 +499,20 @@ class ConvolutionalNet:
                 for group in row_of_groups:
                     group.learning_off(layer_and_pairs[1])
 
+    def noise_off(self, layers):
+        for layer in layers:
+            for row_of_groups in self.neuron_groups[layer]:
+                for group in row_of_groups:
+                    group.noise_amplitude[:] = 0
+                    group.noise_max_amplitude = 0
+
+    def set_error_pair_drives(self, error_pair_drives):
+        for group_num, neuron_group in enumerate(self.neuron_groups):
+            drives = [error_pair_drives[0]] if group_num == self.num_groups - 1 else error_pair_drives
+            for row_of_groups in neuron_group:
+                for group in row_of_groups:
+                    group.set_error_pair_drives(drives)
+
     def black_and_white(self, input_image):
         external_input = np.zeros((self.image_height, self.image_width, 2, 2))
         external_input[:, :, 0, 0] = input_image
@@ -573,8 +574,9 @@ class ConvolutionalNet:
                 for row_num, row_of_groups in enumerate(neuron_groups):
                     for col_num, neuron_group in enumerate(row_of_groups):
                         head_out[row_num, col_num+feature_num*width] = neuron_group.head_out[feature_num]
-                        neg_error_out[row_num, col_num+feature_num*width] = neuron_group.neg_error_out[-1, feature_num]
-                        pos_error_out[row_num, col_num+feature_num*width] = neuron_group.pos_error_out[-1, feature_num]
+                        if layer_num < self.num_groups - 1:
+                            neg_error_out[row_num, col_num+feature_num*width] = neuron_group.neg_error_out[-1, feature_num]
+                            pos_error_out[row_num, col_num+feature_num*width] = neuron_group.pos_error_out[-1, feature_num]
 
             ax[layer_num].pcolor(np.flip(head_out, 0), cmap=blues, vmin=0, vmax=1)
             ax[layer_num].pcolor(np.flip(neg_error_out, 0), cmap=greens, vmin=0, vmax=1)

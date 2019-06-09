@@ -16,6 +16,8 @@ input_image = np.zeros((10, 5))
 if learn:
     start_time = time.time()
     net.run(input_image, 3000, 2)
+    input_image = np.ones((10, 5))
+    net.run(input_image, 3000, 2)
     print(time.time() - start_time)
     net.save_weights('weights/maps_line')
 else:

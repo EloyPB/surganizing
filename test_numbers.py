@@ -3,7 +3,7 @@ from os import listdir
 from surganizing import ConvolutionalNet
 from parameters import pixels, macropixels, symbols
 
-learn = [0, 0]
+learn = [0, 1]
 training_rounds = 1
 weights_folder = 'weights/numbers'
 symbols_to_learn = ['0', '1', '2', '=', '+']
@@ -26,16 +26,19 @@ for symbol in listdir(symbols_folder_name):
 if learn[0]:
     for training_round in range(training_rounds):
         input_image = np.zeros(image_shape)
-        net.run(input_image=input_image, simulation_steps=4000, layers=2)
-        #net.plot(plot_weights=True, show=True)
+        net.run(input_image=input_image, simulation_steps=3000, layers=2)
         input_image = np.ones(image_shape)
-        net.run(input_image=input_image, simulation_steps=4000, layers=2)
-        #net.plot(plot_weights=True, show=True)
+        net.run(input_image=input_image, simulation_steps=3000, layers=2)
+        input_image = np.zeros(image_shape)
+        net.run(input_image=input_image, simulation_steps=1000, layers=2)
+        input_image = np.ones(image_shape)
+        net.run(input_image=input_image, simulation_steps=1000, layers=2)
         net.save_weights(weights_folder)
 
 if learn[1]:
     net.load_weights(weights_folder)
     net.learning_off(((0, (0, 1)), (1, (0,))))
+    net.noise_off((0, 1))
     for training_round in range(training_rounds):
         for symbol_to_learn in symbols_to_learn:
             input_image = symbols[symbol_to_learn]
