@@ -5,13 +5,12 @@ neg_error_delay = 3*time_constant
 
 learning_rate = 0.01
 
-# dendrite_threshold = 4/5  # for learning
-dendrite_threshold = 0
+dendrite_threshold = 3/5
 activation_function_slope = 3
-head_external_threshold = 0.5
+head_external_threshold = 0.4
 
 max_neg_error_drive = 0.6
-max_pos_error_drive = 1.2
+max_pos_error_drive = 1.0
 
 noise_max_amplitude = 0.3
 noise_period = 10*time_constant

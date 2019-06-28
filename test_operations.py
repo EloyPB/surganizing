@@ -76,11 +76,12 @@ if test:
                 net.run(input_image, simulation_steps=num_steps)
 
         net.run(input_image, simulation_steps=num_steps)
-        net.plot(plot_weights=False, show=False)
-
-        print("top down")
-        net.set_error_pair_drives([0, 1])
-        net.run(input_image, simulation_steps=num_steps*2)
-        print("plotting")
+        net.run(input_image, simulation_steps=1)
         net.plot(plot_weights=False, show=True)
+
+        # print("top down")
+        # net.set_error_pair_drives([0, 1])
+        # net.run(input_image, simulation_steps=num_steps*2)
+        # print("plotting")
+        # net.plot(plot_weights=False, show=True)
 
