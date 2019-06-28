@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from surganizing import ConvolutionalNet
+from mismatch import ConvolutionalNet
 import parameters.basic as parameters
 
 learn = False

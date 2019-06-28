@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from surganizing import CircuitGroup
+from mismatch import CircuitGroup
 import parameters.basic as parameters
 
 
@@ -15,11 +15,11 @@ sizes = []
 num_error_pairs = []
 
 top_group = CircuitGroup(name="t", parameters=parameters, num_circuits=2, num_error_pairs=1,
-                         weight_normalizing_pairs=[0])
+                         feedforward_input_pairs=[0])
 
 for bottom_group_num in range(num_bottom_groups):
     groups.append(CircuitGroup(name="b" + str(bottom_group_num), parameters=parameters, num_circuits=1,
-                               num_error_pairs=2, weight_normalizing_pairs=[0], log_weights=False))
+                               num_error_pairs=2, feedforward_input_pairs=[0], log_weights=False))
 
     groups[-1].set_error_pair_drives([1, 0])
     groups[-1].enable_connections(input_groups=[top_group], target_error_pair=1)

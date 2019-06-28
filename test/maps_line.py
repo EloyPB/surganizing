@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from surganizing import ConvolutionalNet
+from mismatch import ConvolutionalNet
 from parameters import pixels, macropixels
 
 learn = True

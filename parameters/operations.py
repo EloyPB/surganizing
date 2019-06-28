@@ -4,6 +4,8 @@ time_constant_error = time_constant/10
 neg_error_delay = 3*time_constant
 
 learning_rate = 0.01
+redistribution_rate = 0.002
+redistribution_noise = 0.1
 
 dendrite_threshold = 3/5
 activation_function_slope = 3

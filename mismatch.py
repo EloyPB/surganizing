@@ -17,14 +17,14 @@ class CircuitGroup:
         num_error_pairs (int): Number of error pairs per circuit.
         pos_error_to_head (list(int)): Weights from the positive error unit to the head unit, for each error pair.
         neg_error_to_head (list(int)): Weights from the negative error unit to the head unit, for each error pair.
-        weight_normalizing_pairs (list(int)): Index of the error pairs for which incoming weights are normalized to 1.
+        feedforward_input_pairs (list(int)): Index of the error pairs which activate the unit during recognition.
         time_constant (float): Time constant for the dynamics of the units.
         time_constant_inhibition (float): Time constant for the dynamics of fast units.
         default_learning_rate (float): Default learning rate.
         learning_rates (list(float)): Current learning rate for each of the error pairs.
     """
 
-    def __init__(self, name, parameters, num_circuits, num_error_pairs, weight_normalizing_pairs,  log_head=False,
+    def __init__(self, name, parameters, num_circuits, num_error_pairs, feedforward_input_pairs, log_head=False,
                  log_head_out=True, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=True,
                  log_pos_error_out=True, log_weights=True, log_noise_amplitude=False):
 
@@ -33,7 +33,7 @@ class CircuitGroup:
 
         self.num_circuits = num_circuits
         self.num_error_pairs = num_error_pairs
-        self.weight_normalizing_pairs = weight_normalizing_pairs
+        self.feedforward_input_pair = feedforward_input_pairs
 
         self.max_neg_error_drive = parameters.max_neg_error_drive
         self.neg_error_to_head = None
@@ -46,6 +46,9 @@ class CircuitGroup:
 
         self.default_learning_rate = parameters.learning_rate
         self.learning_rates = [self.default_learning_rate for _ in range(num_error_pairs)]
+        self.default_redistribution_rate = parameters.redistribution_rate
+        self.redistribution_rate = parameters.redistribution_rate
+        self.redistribution_noise = parameters.redistribution_noise
 
         # parameters for the dendritic nonlinearity
         self.dendrite_threshold = parameters.dendrite_threshold
@@ -204,25 +207,35 @@ class CircuitGroup:
         # calculate inputs to neg_error neurons and update weights
         delayed_neg_error = self.neg_error_queue.pop()
         self.valid_neg_error = np.minimum(np.abs(delayed_neg_error), np.abs(self.neg_error))*np.sign(self.neg_error)
-        responsible_error = 0
+        error_responsible = 0
         for error_pair in self.target_error_pairs:
             input_values = []
             for input_group in self.input_groups[error_pair]:
                 input_values = np.append(input_values, input_group.head_external)
 
-            if error_pair in self.weight_normalizing_pairs:
-                responsible_error += np.sum(np.abs(input_group.valid_neg_error))
+            if error_pair in self.feedforward_input_pair:
+                error_responsible += np.sum(np.abs(input_group.valid_neg_error))
 
             self.neg_error_input[error_pair] = self.dendrite_nonlinearity(
                 np.dot(input_values, self.weights_from[error_pair].weights[error_pair]))
 
             if self.learning_rates[error_pair]:
                 weight_update = np.dot(input_values[:, np.newaxis], - self.valid_neg_error[error_pair][np.newaxis])
-                if error_pair in self.weight_normalizing_pairs:
+                if error_pair in self.feedforward_input_pair:
                     weight_update -= self.weights[error_pair] * (-input_values[:, np.newaxis] + 1) * \
                                      self.neg_error_input[error_pair]
                 learning_rate = self.learning_rates[error_pair] / max(np.sum(input_values), 1)
                 self.weights[error_pair] = np.maximum(0, self.weights[error_pair] + learning_rate * weight_update)
+
+                # weight homogenization
+                if self.redistribution_rate:
+                    active_connections = input_values[np.newaxis].T * self.head_out
+                    priorities = ((1 - self.weights[error_pair]) * active_connections
+                                  * np.random.normal(loc=1, scale=self.redistribution_noise,
+                                                     size=self.weights[error_pair].shape))
+                    redistributable_weights = active_connections * self.weights[error_pair] * self.redistribution_rate
+                    self.weights[error_pair] -= redistributable_weights
+                    self.weights[error_pair][np.unravel_index(np.argmax(priorities), priorities.shape)] += np.sum(redistributable_weights)
 
             if self.log_weights:
                 self.weights_log[error_pair].append(self.weights[error_pair])
@@ -231,7 +244,7 @@ class CircuitGroup:
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.time_constant_inhibition
 
         # update activity of head neuron
-        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(responsible_error) +
+        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(error_responsible) +
                                  np.dot(self.neg_error_to_head, self.neg_error_out)
                                  - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
@@ -385,7 +398,7 @@ class ConvolutionalNet:
             for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
                 group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
                 new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs=num_error_pairs,
-                                         weight_normalizing_pairs=[0], log_head=log_head, log_head_out=log_head_out,
+                                         main_network_input_pairs=[0], log_head=log_head, log_head_out=log_head_out,
                                          log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
                                          log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
                                          log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
@@ -586,7 +599,7 @@ class ConvolutionalNet:
             ax[layer_num].set_xticks(np.arange(width*num_features) + 0.5)
             ax[layer_num].set_xticklabels(np.arange(width*num_features))
             ax[layer_num].set_yticks(np.arange(height) + 0.5)
-            ax[layer_num].set_yticklabels(np.flip(np.arange(height)))
+            ax[layer_num].set_yticklabels(np.flip(np.arange(height), axis=0))
 
             for boundary_num in range(num_features - 1):
                 ax[layer_num].axvline(width + width*boundary_num, color='k')

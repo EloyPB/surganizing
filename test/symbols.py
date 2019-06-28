@@ -1,7 +1,7 @@
 import numpy as np
 from os import listdir
-from surganizing import ConvolutionalNet
-from parameters import pixels, macropixels, symbols
+from mismatch import ConvolutionalNet
+from parameters import macropixels, symbols, pixels
 
 learn = [0, 1]
 training_rounds = 1

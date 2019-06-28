@@ -1,6 +1,6 @@
 import numpy as np
-from old_code.surganizing1 import FeatureMaps
-from old_code.surganizing1 import ConvNet
+from old.surganizing1 import FeatureMaps
+from old.surganizing1 import ConvNet
 
 learning_rate = 0.005
 

@@ -1,9 +1,7 @@
-import time
 import numpy as np
 from os import listdir
-from surganizing import ConvolutionalNet
-from parameters import pixels, macropixels, symbols, operations
-
+from mismatch import ConvolutionalNet
+from parameters import operations, macropixels, symbols, pixels
 
 train = 0
 test = 1
