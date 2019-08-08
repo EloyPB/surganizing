@@ -3,7 +3,7 @@ import numpy as np
 from mismatch import ConvolutionalNet
 import parameters.basic as parameters
 
-learn = False
+learn = True
 
 net = ConvolutionalNet(6, 3)
 net.stack_layer('m', parameters, num_features=2, kernel_size=(1, 1), stride=(1, 1))

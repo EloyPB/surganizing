@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import operations, macropixels, symbols, pixels
 
-train = 0
+train = 1
 test = 1
 weights_folder_name = 'weights/operations'
 
@@ -18,7 +18,7 @@ net.initialize()
 net.share_weights()
 
 symbols = {}
-symbols_folder_name = 'symbols/math 14x10'
+symbols_folder_name = './../symbols/math 14x10'
 for symbol in listdir(symbols_folder_name):
     symbols[symbol] = np.loadtxt(symbols_folder_name + '/' + symbol)
 

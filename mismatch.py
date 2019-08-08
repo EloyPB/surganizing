@@ -397,8 +397,8 @@ class ConvolutionalNet:
             row_of_groups = []
             for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
                 group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
-                new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs=num_error_pairs,
-                                         main_network_input_pairs=[0], log_head=log_head, log_head_out=log_head_out,
+                new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs,
+                                         feedforward_input_pairs=[0], log_head=log_head, log_head_out=log_head_out,
                                          log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
                                          log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
                                          log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
