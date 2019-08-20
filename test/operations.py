@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import operations, macropixels, symbols, pixels
 
-train = 1
+train = 0
 test = 1
 weights_folder_name = 'weights/operations'
 
@@ -75,11 +75,11 @@ if test:
 
         net.run(input_image, simulation_steps=num_steps)
         net.run(input_image, simulation_steps=1)
-        net.plot(plot_weights=False, show=True)
+        net.plot(plot_weights=False, show=False)
 
-        # print("top down")
-        # net.set_error_pair_drives([0, 1])
-        # net.run(input_image, simulation_steps=num_steps*2)
-        # print("plotting")
-        # net.plot(plot_weights=False, show=True)
+        print("top down")
+        net.set_error_pair_drives([0, 1])
+        net.run(input_image, simulation_steps=num_steps*2)
+        print("plotting")
+        net.plot(plot_weights=False, show=True)
 
