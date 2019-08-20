@@ -15,13 +15,22 @@ class CircuitGroup:
         names (list(string)): Names of each of the circuits in the group.
         num_circuits (int): Number of circuits.
         num_error_pairs (int): Number of error pairs per circuit.
-        pos_error_to_head (list(int)): Weights from the positive error unit to the head unit, for each error pair.
-        neg_error_to_head (list(int)): Weights from the negative error unit to the head unit, for each error pair.
         feedforward_input_pairs (list(int)): Index of the error pairs which activate the unit during recognition.
+        max_neg_error_drive (float): Maximum weight from the negative error unit to the head unit (absolute value).
+        neg_error_to_head (list(int)): Weights from the negative error unit to the head unit, for each error pair.
+        max_pos_error_drive (float): Maximum weight from the positive error unit to the head unit (absolute value).
+        pos_error_to_head (list(int)): Weights from the positive error unit to the head unit, for each error pair.
         time_constant (float): Time constant for the dynamics of the units.
         time_constant_inhibition (float): Time constant for the dynamics of fast units.
+        time_constant_error (float): Time constant for the dynamics of error units.
         default_learning_rate (float): Default learning rate.
         learning_rates (list(float)): Current learning rate for each of the error pairs.
+        default_redistribution_rate (float): Default weight redistribution rate.
+        redistribution_rate (float): Current weight redistribution rate.
+        redistribution_noise (float): Noise in the selection of the smallest weight that receives the redistributed amount.
+        dendrite_threshold (float):
+        dendrite_slope (float):
+        dendrite_offset (float):
     """
 
     def __init__(self, name, parameters, num_circuits, num_error_pairs, feedforward_input_pairs, log_head=False,
@@ -575,7 +584,7 @@ class ConvolutionalNet:
             ax_w.set_xticklabels([i for i in range(kernel_x)] * output_features)
             ax_w.set_yticks([i + 0.5 for i in range(weights.shape[0])])
             ax_w.set_yticklabels(list(reversed([i for i in range(kernel_y)] * input_features)))
-            ax_w.set_title("Weights onto the " + error_pair + " error pair of '" + group_name + "'")
+            ax_w.set_title(f"Weights onto the {error_pair} error pair of '{group_name}'")
             fig_w.colorbar(plot, ax=ax_w)
 
             for boundary_num in range(output_features - 1):
