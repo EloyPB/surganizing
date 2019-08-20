@@ -3,11 +3,11 @@ import numpy as np
 from mismatch import ConvolutionalNet
 from parameters import pixels, macropixels
 
-learn = True
+learn = False
 
 net = ConvolutionalNet(10, 5)
 net.stack_layer('p', pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
-net.stack_layer('m', macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
+net.stack_layer('m', macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1), terminal=True)
 net.initialize()
 net.share_weights()
 

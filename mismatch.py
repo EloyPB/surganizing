@@ -27,10 +27,11 @@ class CircuitGroup:
         learning_rates (list(float)): Current learning rate for each of the error pairs.
         default_redistribution_rate (float): Default weight redistribution rate.
         redistribution_rate (float): Current weight redistribution rate.
-        redistribution_noise (float): Noise in the selection of the smallest weight that receives the redistributed amount.
-        dendrite_threshold (float):
-        dendrite_slope (float):
-        dendrite_offset (float):
+        redistribution_noise (float): Noise in the selection of the smallest weight that receives
+            the redistributed amount.
+        dendrite_threshold (float): Threshold for dendritic activation.
+        dendrite_slope (float): Slope for the linear activation function of the dendrite.
+        dendrite_offset (float): Offset for the linear activation function of the dendrite.
     """
 
     def __init__(self, name, parameters, num_circuits, num_error_pairs, feedforward_input_pairs, log_head=False,
@@ -367,24 +368,35 @@ class Dummy:
 
 
 class ConvolutionalNet:
+    """Convolutional network of mismatch detection circuits.
+
+    Attributes:
+        image_height (int): Height of the input image in pixels.
+        image_width (int): Width of the input image in pixels.
+        num_layers (int): Number of layers in the network.
+        layer_names (list(string)): Names of the layers.
+        kernel_sizes (tuple(int)):
+        strides (tuple(int)):
+        offsets (tuple(int)):
+    """
     def __init__(self, image_height, image_width):
         self.image_height = image_height
         self.image_width = image_width
-        self.neuron_groups = []
-        self.group_names = []
-        self.num_groups = 0
-        self.strides = []
+        self.num_layers = 0
+        self.layer_names = []
         self.kernel_sizes = []
+        self.strides = []
         self.offsets = []
         self.filler = []
+        self.neuron_groups = []
         self.dummy = Dummy()
 
     def stack_layer(self, name, group_parameters, num_features, kernel_size, stride, offset=(0, 0), log_head=False,
                     log_head_out=False, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False,
                     log_pos_error_out=False, log_weights=False, log_noise_amplitude=False, terminal=False):
 
-        self.num_groups += 1
-        self.group_names.append(name)
+        self.num_layers += 1
+        self.layer_names.append(name)
         self.kernel_sizes.append(kernel_size)
         self.strides.append(stride)
         self.offsets.append(offset)
@@ -395,7 +407,7 @@ class ConvolutionalNet:
         else:
             input_height = len(self.neuron_groups[-1])
             input_width = len(self.neuron_groups[-1][-1])
-            self.filler.append(np.ones((len(self.neuron_groups[-1]), len(self.neuron_groups[-1][-1]))))
+            self.filler.append(np.ones((input_height, input_width)))
 
         # check sizes
         if (input_height % stride[0] != 0 or input_width % stride[1] != 0
@@ -410,7 +422,7 @@ class ConvolutionalNet:
         for y_out in range(math.ceil((input_height-offset[0])/stride[0])):
             row_of_groups = []
             for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
-                group_name = name + "[" + str(y_out) + ", " + str(x_out) + "]"
+                group_name = f"{name}[{y_out}, {x_out}]"
                 new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs,
                                          feedforward_input_pairs=[0], log_head=log_head, log_head_out=log_head_out,
                                          log_neg_error=log_neg_error, log_neg_error_diff=log_neg_error_diff,
@@ -456,11 +468,13 @@ class ConvolutionalNet:
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
             for y, row_of_groups in enumerate(neuron_groups):
                 for x, group in enumerate(row_of_groups):
+                    # weights onto first error pair
                     if y != 0 or x != 0:
                         group.learning_off([0])
                         group.weights_from[0] = neuron_groups[0][0]
 
-                    if layer_num < self.num_groups - 1:
+                    # weights onto second error pair
+                    if layer_num < self.num_layers - 1:
                         kernel_y = self.kernel_sizes[layer_num + 1][0]
                         kernel_x = self.kernel_sizes[layer_num + 1][1]
                         stride_y = self.strides[layer_num + 1][0]
@@ -484,45 +498,45 @@ class ConvolutionalNet:
             os.makedirs(folder_name)
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
             if layer_num > 0:
-                neuron_groups[0][0].weights[0].dump(folder_name + "/" + self.group_names[layer_num] + "_(0,0)_0")
-            if layer_num < self.num_groups - 1:
+                neuron_groups[0][0].weights[0].dump(folder_name + "/" + self.layer_names[layer_num] + "_(0,0)_0")
+            if layer_num < self.num_layers - 1:
                 for y in range(self.offsets[layer_num + 1][0],
                                self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
                     for x in range(self.offsets[layer_num + 1][1],
                                    self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
-                        neuron_groups[y][x].weights[1].dump(f"{folder_name}/{self.group_names[layer_num]}_({y},{x})_1")
+                        neuron_groups[y][x].weights[1].dump(f"{folder_name}/{self.layer_names[layer_num]}_({y},{x})_1")
                 if self.filler[layer_num].any():
                     y_filler = np.where(self.filler[layer_num])[0][0]
                     x_filler = np.where(self.filler[layer_num])[1][0]
-                    neuron_groups[y_filler][x_filler].weights[1].dump(f"{folder_name}/{self.group_names[layer_num]}_"
-                                                                      f"({y_filler}, {x_filler})_1")
+                    neuron_groups[y_filler][x_filler].weights[1].dump(f"{folder_name}/{self.layer_names[layer_num]}_"
+                                                                      f"({y_filler},{x_filler})_1")
 
     def load_weights(self, folder_name, layers_and_weights="all"):
         if not os.path.exists(folder_name):
             sys.exit("Weights not found! Exiting...")
         if layers_and_weights == "all":
-            layers_and_weights = [[group_num, [0, 1]] for group_num in range(self.num_groups)]
+            layers_and_weights = [[group_num, [0, 1]] for group_num in range(self.num_layers)]
         for layer_and_weights in layers_and_weights:
             layer_num = layer_and_weights[0]
             for error_pair in layer_and_weights[1]:
                 if error_pair == 0 and layer_num > 0:
                     self.neuron_groups[layer_num][0][0].weights[0] = np.load(folder_name + "/" +
-                                                                             self.group_names[layer_num] +
+                                                                             self.layer_names[layer_num] +
                                                                              "_(0,0)_0", allow_pickle=True)
-                elif error_pair == 1 and layer_num < self.num_groups - 1:
+                elif error_pair == 1 and layer_num < self.num_layers - 1:
                     for y in range(self.offsets[layer_num + 1][0],
                                    self.offsets[layer_num + 1][0] + self.kernel_sizes[layer_num + 1][0]):
                         for x in range(self.offsets[layer_num + 1][1],
                                        self.offsets[layer_num + 1][1] + self.kernel_sizes[layer_num + 1][1]):
                             self.neuron_groups[layer_num][y][x].weights[1] = np.load(
-                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1",
+                                folder_name + "/" + self.layer_names[layer_num] + "_(" + str(y) + "," + str(x) + ")_1",
                                 allow_pickle=True)
                     if self.filler[layer_num].any():
                         y_filler = np.where(self.filler[layer_num])[0][0]
                         x_filler = np.where(self.filler[layer_num])[1][0]
                         for y, x in zip(np.where(self.filler[layer_num])[0], np.where(self.filler[layer_num])[1]):
                             self.neuron_groups[layer_num][y][x].weights[1] = np.load(
-                                folder_name + "/" + self.group_names[layer_num] + "_(" + str(y_filler) + "," + str(
+                                folder_name + "/" + self.layer_names[layer_num] + "_(" + str(y_filler) + "," + str(
                                     x_filler) + ")_1", allow_pickle=True)
 
     def learning_off(self, layers_and_pairs):
@@ -541,7 +555,7 @@ class ConvolutionalNet:
 
     def set_error_pair_drives(self, error_pair_drives):
         for group_num, neuron_group in enumerate(self.neuron_groups):
-            drives = [error_pair_drives[0]] if group_num == self.num_groups - 1 else error_pair_drives
+            drives = [error_pair_drives[0]] if group_num == self.num_layers - 1 else error_pair_drives
             for row_of_groups in neuron_group:
                 for group in row_of_groups:
                     group.set_error_pair_drives(drives)
@@ -558,7 +572,7 @@ class ConvolutionalNet:
         else:
             external_input = np.zeros((self.image_height, self.image_width, 2, 2))
         if layers == 0:
-            layers = self.num_groups
+            layers = self.num_layers
         for step_num in range(simulation_steps):
             print(step_num)
             for layer in range(layers):
@@ -592,7 +606,7 @@ class ConvolutionalNet:
             for boundary_num in range(input_features - 1):
                 ax_w.axhline(kernel_y + kernel_y * boundary_num, color='w')
 
-        fig, ax = plt.subplots(1, self.num_groups)
+        fig, ax = plt.subplots(1, self.num_layers)
 
         for layer_num, neuron_groups in enumerate(self.neuron_groups):
             height = len(neuron_groups)
@@ -607,7 +621,7 @@ class ConvolutionalNet:
                 for row_num, row_of_groups in enumerate(neuron_groups):
                     for col_num, neuron_group in enumerate(row_of_groups):
                         head_out[row_num, col_num+feature_num*width] = neuron_group.head_out[feature_num]
-                        if layer_num < self.num_groups - 1:
+                        if layer_num < self.num_layers - 1:
                             neg_error_out[row_num, col_num+feature_num*width] = neuron_group.neg_error_out[-1,
                                                                                                            feature_num]
                             pos_error_out[row_num, col_num+feature_num*width] = neuron_group.pos_error_out[-1,
@@ -643,10 +657,10 @@ class ConvolutionalNet:
                         output_feature*kernel_x:(output_feature+1)*kernel_x] = (neuron_groups[0][0].weights[0][indices]
                                                                                 .reshape((kernel_y, kernel_x)))
 
-                pretty_weights(self.group_names[layer_num], 'first', weights_reshaped)
+                pretty_weights(self.layer_names[layer_num], 'first', weights_reshaped)
 
             # plot weights onto second error pair
-            if plot_weights and layer_num < self.num_groups - 1:
+            if plot_weights and layer_num < self.num_layers - 1:
                 kernel_y = self.kernel_sizes[layer_num + 1][0]
                 kernel_x = self.kernel_sizes[layer_num + 1][1]
                 offset_y = self.offsets[layer_num + 1][0]
@@ -664,7 +678,7 @@ class ConvolutionalNet:
                                     (self.neuron_groups[layer_num][y + offset_y][x + offset_x]
                                         .weights[1][input_feature, output_feature])
 
-                pretty_weights(self.group_names[layer_num], 'second', weights_reshaped)
+                pretty_weights(self.layer_names[layer_num], 'second', weights_reshaped)
 
         # plot colorbars in the activations figure
         fig.subplots_adjust(right=0.82)

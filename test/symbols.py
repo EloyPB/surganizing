@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import macropixels, symbols, pixels
 
-learn = [0, 0]
+learn = [1, 1]
 training_rounds = 1
 weights_folder = 'weights/operations'
 symbols_to_learn = ['0', '1', '2', '=', '+']
