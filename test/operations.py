@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import operations, macropixels, symbols, pixels
 
-train = 0
+train = 1
 test = 1
 weights_folder_name = 'weights/operations'
 
@@ -12,9 +12,9 @@ image_size = (70, 10)
 net = ConvolutionalNet(image_size[0], image_size[1])
 net.stack_layer('p', group_parameters=pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
 net.stack_layer('m', group_parameters=macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
+net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(14, 9), offset=(1, 1))
 net.stack_layer('o', group_parameters=operations, num_features=3, kernel_size=(5, 1), stride=(5, 1), terminal=True)
-net.initialize()
+net.initialize_weights()
 net.share_weights()
 
 symbols = {}
@@ -34,7 +34,7 @@ if train:
             input_image = symbols[training_example[0]]
             for symbol in training_example[1:]:
                 input_image = np.append(input_image, symbols[symbol], 0)
-            net.run(input_image, simulation_steps=3500, layers=4)
+            net.run(input_image, simulation_steps=3000, layers=4)
 
             input_image = np.zeros(input_image.shape)
             net.run(input_image, simulation_steps=200, layers=4)

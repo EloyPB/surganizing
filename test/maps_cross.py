@@ -8,7 +8,7 @@ learn = True
 net = ConvolutionalNet(6, 3)
 net.stack_layer('m', parameters, num_features=2, kernel_size=(1, 1), stride=(1, 1))
 net.stack_layer('s', parameters, num_features=4, kernel_size=(3, 3), stride=(3, 3))
-net.initialize()
+net.initialize_weights()
 net.share_weights()
 
 cross = np.array([[1, 0, 1], [0, 1, 0], [1, 0, 1]])

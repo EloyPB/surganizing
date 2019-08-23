@@ -409,19 +409,22 @@ class ConvolutionalNet:
             input_width = len(self.neuron_groups[-1][-1])
             self.filler.append(np.ones((input_height, input_width)))
 
-        # check sizes
-        if (input_height % stride[0] != 0 or input_width % stride[1] != 0
-                or kernel_size[0] % stride[0] != 0 and kernel_size[0] > stride[0]
-                or kernel_size[1] % stride[1] != 0 and kernel_size[1] > stride[1]):
-            sys.exit("Input or kernel_size sizes are not multiples of the stride in layer " + name)
+        # # check sizes
+        # if (input_height % stride[0] != 0 or input_width % stride[1] != 0
+        #         or kernel_size[0] % stride[0] != 0 and kernel_size[0] > stride[0]
+        #         or kernel_size[1] % stride[1] != 0 and kernel_size[1] > stride[1]):
+        #     sys.exit("Input or kernel_size sizes are not multiples of the stride in layer " + name)
 
         # create new layer
         neuron_groups = []
         num_error_pairs = 1 if terminal else 2
         error_pair_drive = [1] if terminal else [1, 0]
-        for y_out in range(math.ceil((input_height-offset[0])/stride[0])):
+
+        output_height = int((input_height - offset[0] - kernel_size[0] + stride[0])/stride[0])
+        output_width = int((input_width - offset[1] - kernel_size[1] + stride[1])/stride[1])
+        for y_out in range(output_height):
             row_of_groups = []
-            for x_out in range(math.ceil((input_width-offset[1])/stride[1])):
+            for x_out in range(output_width):
                 group_name = f"{name}[{y_out}, {x_out}]"
                 new_group = CircuitGroup(group_name, group_parameters, num_features, num_error_pairs,
                                          feedforward_input_pairs=[0], log_head=log_head, log_head_out=log_head_out,
@@ -429,36 +432,40 @@ class ConvolutionalNet:
                                          log_neg_error_out=log_neg_error_out, log_pos_error_out=log_pos_error_out,
                                          log_weights=log_weights, log_noise_amplitude=log_noise_amplitude)
                 new_group.set_error_pair_drives(error_pair_drive)
+
                 # connect previous layer to new layer
                 if len(self.neuron_groups) != 0:
-                    for y_in in range(y_out*stride[0] + offset[0], y_out*stride[0] + offset[0] + kernel_size[0]):
-                        y_in_periodic = y_in if y_in < input_height else y_in - input_height
-                        for x_in in range(x_out*stride[1] + offset[1], x_out*stride[1] + offset[1] + kernel_size[1]):
-                            x_in_periodic = x_in if x_in < input_width else x_in - input_width
-                            new_group.enable_connections([self.neuron_groups[-1][y_in_periodic][x_in_periodic]], 0)
-                            self.filler[-1][y_in_periodic][x_in_periodic] = 0
+                    for y_in in range(y_out * stride[0] + offset[0], y_out * stride[0] + offset[0] + kernel_size[0]):
+                        for x_in in range(x_out * stride[1] + offset[1],
+                                          x_out * stride[1] + offset[1] + kernel_size[1]):
+                            new_group.enable_connections([self.neuron_groups[-1][y_in][x_in]], 0)
+                            self.filler[-1][y_in][x_in] = 0
+
                 row_of_groups.append(new_group)
             neuron_groups.append(row_of_groups)
 
         # connect new layer to previous layer
         if len(self.neuron_groups) != 0:
             for y_in in range(input_height):
-                first_y_out = (y_in - offset[0])//stride[0] - max(kernel_size[0]//stride[0] - 1, 0)
-                last_y_out = (y_in - offset[0])//stride[0] + 1
+                first_y_out = (y_in - offset[0]) // stride[0] - max(kernel_size[0] // stride[0] - 1, 0)
+                last_y_out = ((y_in - offset[0]) // stride[0] + 1)
                 for x_in in range(input_width):
                     if self.filler[-1][y_in][x_in] == 0:
-                        first_x_out = (x_in - offset[1])//stride[1] - max(kernel_size[1]//stride[1] - 1, 0)
-                        last_x_out = (x_in - offset[1])//stride[1] + 1
+                        first_x_out = (x_in - offset[1]) // stride[1] - max(kernel_size[1] // stride[1] - 1, 0)
+                        last_x_out = ((x_in - offset[1]) // stride[1] + 1)
                         for y_out in range(first_y_out, last_y_out):
+                            y_out_periodic = y_out % output_height
                             for x_out in range(first_x_out, last_x_out):
-                                self.neuron_groups[-1][y_in][x_in].enable_connections([neuron_groups[y_out][x_out]], 1)
+                                x_out_periodic = x_out % output_width
+                                self.neuron_groups[-1][y_in][x_in].enable_connections(
+                                    [neuron_groups[y_out_periodic][x_out_periodic]], 1)
                     else:
                         self.neuron_groups[-1][y_in][x_in].enable_connections([self.dummy], 1)
 
         self.neuron_groups.append(neuron_groups)
         print(f"Created layer {name} of size ({len(neuron_groups)}, {len(neuron_groups[0])})")
 
-    def initialize(self):
+    def initialize_weights(self):
         for neuron_groups in self.neuron_groups:
             for row_of_groups in neuron_groups:
                 for group in row_of_groups:
