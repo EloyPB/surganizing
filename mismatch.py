@@ -443,6 +443,7 @@ class ConvolutionalNet:
 
                 row_of_groups.append(new_group)
             neuron_groups.append(row_of_groups)
+        self.neuron_groups.append(neuron_groups)
 
         # connect new layer to previous layer
         if len(self.neuron_groups) != 0:
@@ -462,7 +463,6 @@ class ConvolutionalNet:
                     else:
                         self.neuron_groups[-1][y_in][x_in].enable_connections([self.dummy], 1)
 
-        self.neuron_groups.append(neuron_groups)
         print(f"Created layer {name} of size ({len(neuron_groups)}, {len(neuron_groups[0])})")
 
     def initialize_weights(self):
