@@ -1,6 +1,7 @@
 import math
 import sys
 import os
+import json
 import numpy as np
 from collections import deque
 from matplotlib import pyplot as plt
@@ -132,7 +133,7 @@ class CircuitGroup:
         self.noise_period = parameters.noise_period
         self.noise_smoothing_factor = parameters.noise_smoothing_factor
         # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
-        self.noise_amplitude = parameters.noise_max_amplitude*np.ones(self.num_circuits)
+        self.noise_amplitude = parameters.noise_max_amplitude*np.ones(self.num_circuits)*np.random.rand(self.num_circuits)
         # noise_amplitude increases constantly with noise_rise_rate saturating at noise_max_amplitude and
         # decays with noise_fall_rate when h_out is above noise_fall_threshold
         self.noise_max_amplitude = parameters.noise_max_amplitude
@@ -409,12 +410,6 @@ class ConvolutionalNet:
             input_width = len(self.neuron_groups[-1][-1])
             self.filler.append(np.ones((input_height, input_width)))
 
-        # # check sizes
-        # if (input_height % stride[0] != 0 or input_width % stride[1] != 0
-        #         or kernel_size[0] % stride[0] != 0 and kernel_size[0] > stride[0]
-        #         or kernel_size[1] % stride[1] != 0 and kernel_size[1] > stride[1]):
-        #     sys.exit("Input or kernel_size sizes are not multiples of the stride in layer " + name)
-
         # create new layer
         neuron_groups = []
         num_error_pairs = 1 if terminal else 2
@@ -581,7 +576,7 @@ class ConvolutionalNet:
         if layers == 0:
             layers = self.num_layers
         for step_num in range(simulation_steps):
-            print(step_num)
+            # print(step_num)
             for layer in range(layers):
                 for row_num, row_of_groups in enumerate(self.neuron_groups[layer]):
                     for col_num, group in enumerate(row_of_groups):
@@ -595,6 +590,9 @@ class ConvolutionalNet:
         reds = colors.LinearSegmentedColormap.from_list('reds', [(1, 0, 0, 0), (1, 0, 0, 1)], N=100)
         greens = colors.LinearSegmentedColormap.from_list('greens', [(0, 1, 0, 0), (0, 1, 0, 1)], N=100)
         blues = colors.LinearSegmentedColormap.from_list('blues', [(0, 0, 1, 0), (0, 0, 1, 1)], N=100)
+
+        with open("labels.json") as f:
+            labels = json.load(f)
 
         def pretty_weights(group_name, error_pair, weights):
             fig_w, ax_w = plt.subplots()
@@ -640,7 +638,10 @@ class ConvolutionalNet:
             ax[layer_num].set_aspect('equal')
 
             ax[layer_num].set_xticks(np.arange(width*num_features) + 0.5)
-            ax[layer_num].set_xticklabels(np.arange(width*num_features))
+            if str(layer_num) in labels:
+                ax[layer_num].set_xticklabels(labels[str(layer_num)])
+            else:
+                ax[layer_num].set_xticklabels(np.arange(width*num_features))
             ax[layer_num].set_yticks(np.arange(height) + 0.5)
             ax[layer_num].set_yticklabels(np.flip(np.arange(height), axis=0))
 

@@ -16,8 +16,10 @@ max_pos_error_drive = 1.2
 
 noise_max_amplitude = 0.3
 noise_period = 10*time_constant
-noise_rise_rate = 0.00005
-noise_fall_rate = 0.0002
+# noise_rise_rate = 0.00005
+# noise_fall_rate = 0.0002
+noise_rise_rate = 0.00002
+noise_fall_rate = 0.0003
 noise_smoothing_factor = 0.995
 
 
