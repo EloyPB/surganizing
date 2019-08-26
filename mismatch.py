@@ -133,7 +133,9 @@ class CircuitGroup:
         self.noise_period = parameters.noise_period
         self.noise_smoothing_factor = parameters.noise_smoothing_factor
         # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
-        self.noise_amplitude = parameters.noise_max_amplitude*np.ones(self.num_circuits)*np.random.rand(self.num_circuits)
+        # self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits) * np.random.rand(
+        #     self.num_circuits)
+        self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits)
         # noise_amplitude increases constantly with noise_rise_rate saturating at noise_max_amplitude and
         # decays with noise_fall_rate when h_out is above noise_fall_threshold
         self.noise_max_amplitude = parameters.noise_max_amplitude
@@ -201,12 +203,9 @@ class CircuitGroup:
         for error_pair in error_pairs:
             self.learning_rates[error_pair] = 0
 
-    def learning_on(self, learning_rates=()):
-        if len(learning_rates) > 0:
-            for error_pair, learning_rate in enumerate(learning_rates):
-                self.learning_rates[error_pair] = learning_rate
-        else:
-            self.learning_rates = [self.default_learning_rate for _ in range(self.num_error_pairs)]
+    def learning_on(self, error_pairs):
+        for error_pair in error_pairs:
+            self.learning_rates[error_pair] = self.default_learning_rate
 
     def set_error_pair_drives(self, error_pair_drives):
         self.neg_error_to_head = np.array(error_pair_drives) * self.max_neg_error_drive
@@ -256,9 +255,9 @@ class CircuitGroup:
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.time_constant_inhibition
 
         # update activity of head neuron
-        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(error_responsible) +
-                                 np.dot(self.neg_error_to_head, self.neg_error_out)
-                                 - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
+        self.head += (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(error_responsible) +
+                      np.dot(self.neg_error_to_head, self.neg_error_out)
+                      - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
         self.head_out = np.maximum(np.tanh(self.activation_function_slope * self.head), 0)
@@ -270,7 +269,7 @@ class CircuitGroup:
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
         if external_input is not None:
             neg_error_update += external_input
-        self.neg_error = self.neg_error + neg_error_update / self.time_constant_error
+        self.neg_error += neg_error_update / self.time_constant_error
         self.neg_error_queue.appendleft(self.neg_error)
         if self.log_neg_error:
             self.neg_error_log.append(self.neg_error)
@@ -548,6 +547,13 @@ class ConvolutionalNet:
                 for group in row_of_groups:
                     group.learning_off(layer_and_pairs[1])
 
+    def learning_on(self, layers_and_pairs):
+        for layer_and_pairs in layers_and_pairs:
+            layer_num = layer_and_pairs[0]
+            for row_of_groups in self.neuron_groups[layer_num]:
+                for group in row_of_groups:
+                    group.learning_on(layer_and_pairs[1])
+
     def noise_off(self, layers):
         for layer in layers:
             for row_of_groups in self.neuron_groups[layer]:
@@ -568,22 +574,21 @@ class ConvolutionalNet:
         external_input[:, :, 0, 1] = 1 - input_image
         return external_input
 
-    def run(self, input_image=None, simulation_steps=1, layers=0):
+    def run(self, simulation_steps, input_image=None):
         if input_image is not None:
             external_input = self.black_and_white(input_image)
         else:
             external_input = np.zeros((self.image_height, self.image_width, 2, 2))
-        if layers == 0:
-            layers = self.num_layers
-        for step_num in range(simulation_steps):
-            # print(step_num)
-            for layer in range(layers):
-                for row_num, row_of_groups in enumerate(self.neuron_groups[layer]):
-                    for col_num, group in enumerate(row_of_groups):
-                        if layer == 0:
-                            group.step(external_input[row_num, col_num])
-                        else:
-                            group.step()
+
+        for step_num in range(max(simulation_steps)):
+            for layer_num, layer_steps in enumerate(simulation_steps):
+                if step_num < layer_steps:
+                    for row_num, row_of_groups in enumerate(self.neuron_groups[layer_num]):
+                        for col_num, group in enumerate(row_of_groups):
+                            if layer_num == 0:
+                                group.step(external_input[row_num, col_num])
+                            else:
+                                group.step()
 
     def plot(self, plot_weights=False, show=False):
         # plot activities
