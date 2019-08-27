@@ -201,12 +201,9 @@ class CircuitGroup:
         for error_pair in error_pairs:
             self.learning_rates[error_pair] = 0
 
-    def learning_on(self, learning_rates=()):
-        if len(learning_rates) > 0:
-            for error_pair, learning_rate in enumerate(learning_rates):
-                self.learning_rates[error_pair] = learning_rate
-        else:
-            self.learning_rates = [self.default_learning_rate for _ in range(self.num_error_pairs)]
+    def learning_on(self, error_pairs):
+        for error_pair in error_pairs:
+            self.learning_rates[error_pair] = self.default_learning_rate
 
     def set_error_pair_drives(self, error_pair_drives):
         self.neg_error_to_head = np.array(error_pair_drives) * self.max_neg_error_drive
@@ -392,7 +389,6 @@ class ConvolutionalNet:
         self.neuron_groups = []
         self.dummy = Dummy()
 
-    # NEW
     def stack_layer(self, name, group_parameters, num_features, kernel_size, stride, offset=(0, 0), log_head=False,
                     log_head_out=False, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False,
                     log_pos_error_out=False, log_weights=False, log_noise_amplitude=False, terminal=False):

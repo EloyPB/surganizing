@@ -7,7 +7,7 @@ learning_rate = 0.01
 redistribution_rate = 0.002
 redistribution_noise = 0.1
 
-dendrite_threshold = 3/4
+dendrite_threshold = 5/6
 activation_function_slope = 3
 head_external_threshold = 0.5
 

@@ -25,19 +25,23 @@ for symbol in listdir(symbols_folder_name):
 training_examples = [['0', '+', '0', '=', '0'], ['1', '+', '0', '=', '1']]
 training_rounds = 1
 
+training_steps = 3000
+activation_steps = 100
+
 if train:
     net.load_weights(weights_folder_name, ((0, (0, 1)), (1, (0, 1)), (2, (0,))))
     net.learning_off(((0, (0, 1)), (1, (0, 1)), (2, (0,))))
     net.noise_off((0, 1, 2))
     for training_round in range(training_rounds):
         for training_example in training_examples:
+            print(f"training {training_example}")
             input_image = symbols[training_example[0]]
             for symbol in training_example[1:]:
                 input_image = np.append(input_image, symbols[symbol], 0)
-            net.run(input_image, simulation_steps=3000, layers=4)
+            net.run((activation_steps, activation_steps*2, training_steps, training_steps), input_image)
 
             input_image = np.zeros(input_image.shape)
-            net.run(input_image, simulation_steps=200, layers=4)
+            net.run((200, 200, 200, 200), input_image)
             #net.plot(plot_weights=True, show=True)
     net.save_weights(weights_folder_name)
 
@@ -50,36 +54,28 @@ if test:
     blank_image = np.zeros(image_size)
     num_steps = 80
 
-    static = 0
     forwards = 1
     backwards = 0
 
     for test_example in test_examples:
-        if static:
-            input_image = symbols[test_example[0]]
-            for symbol in test_example[1:]:
-                input_image = np.append(input_image, symbols[symbol], 0)
-            net.run(input_image, simulation_steps=num_steps)
-
-        elif forwards:
+        if forwards:
             input_image = blank_image
             for symbol_num, symbol in enumerate(test_example):
                 input_image[symbol_num*14:(symbol_num + 1)*14, :] = symbols[symbol]
-                net.run(input_image, simulation_steps=num_steps)
+                net.run((num_steps, num_steps, num_steps, num_steps), input_image)
 
         else:  # backwards
             input_image = blank_image
             for symbol_num in range(4, -1, -1):
                 input_image[symbol_num * 14:(symbol_num + 1) * 14] = symbols[test_example[symbol_num]]
-                net.run(input_image, simulation_steps=num_steps)
+                net.run((num_steps, num_steps, num_steps, num_steps), input_image)
 
-        net.run(input_image, simulation_steps=num_steps)
-        net.run(input_image, simulation_steps=1)
+        net.run((num_steps, num_steps, num_steps, num_steps), input_image)
         net.plot(plot_weights=False, show=False)
 
         print("top down")
         net.set_error_pair_drives([0, 1])
-        net.run(input_image, simulation_steps=num_steps*2)
+        net.run((num_steps, num_steps*2, num_steps*2, num_steps*2), input_image)
         print("plotting")
         net.plot(plot_weights=False, show=True)
 
