@@ -3,8 +3,8 @@ time_constant_inhibition = time_constant/10
 time_constant_error = time_constant/10
 neg_error_delay = 3*time_constant
 
-learning_rate = 0.005
-redistribution_rate = 0.0005
+learning_rate = 0.01
+redistribution_rate = 0.002
 redistribution_noise = 0.1
 
 dendrite_threshold = 2/3
@@ -17,6 +17,6 @@ max_pos_error_drive = 1.2
 noise_max_amplitude = 0.3
 noise_period = 10*time_constant
 noise_rise_rate = 0.00005
-noise_fall_rate = 0.0003
+noise_fall_rate = 0.0002
 noise_smoothing_factor = 0.995
 

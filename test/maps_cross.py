@@ -18,10 +18,10 @@ if learn:
     start_time = time.time()
     input_image = np.zeros((6, 3))
     input_image[0:3, 0:3] = cross
-    net.run(input_image, 3000, 2)
+    net.run((3000, 3000), input_image)
     input_image = np.zeros((6, 3))
     input_image[0:3, 0:3] = plus
-    net.run(input_image, 3000, 2)
+    net.run((3000, 3000), input_image)
     print(time.time() - start_time)
     net.save_weights('weights/maps_cross')
 else:
@@ -31,7 +31,7 @@ input_image = np.zeros((6, 3))
 input_image[0:3, 0:3] = cross
 input_image[3:] = plus
 net.learning_off(((0, (0, 1)), (1, (0,))))
-net.run(input_image, 200, 2)
+net.run((200, 200), input_image)
 
 print("plotting...")
 net.plot(show=True, plot_weights=True)

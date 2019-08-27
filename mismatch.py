@@ -133,9 +133,7 @@ class CircuitGroup:
         self.noise_period = parameters.noise_period
         self.noise_smoothing_factor = parameters.noise_smoothing_factor
         # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
-        # self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits) * np.random.rand(
-        #     self.num_circuits)
-        self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits)
+        self.noise_amplitude = parameters.noise_max_amplitude*np.ones(self.num_circuits)
         # noise_amplitude increases constantly with noise_rise_rate saturating at noise_max_amplitude and
         # decays with noise_fall_rate when h_out is above noise_fall_threshold
         self.noise_max_amplitude = parameters.noise_max_amplitude
@@ -203,9 +201,12 @@ class CircuitGroup:
         for error_pair in error_pairs:
             self.learning_rates[error_pair] = 0
 
-    def learning_on(self, error_pairs):
-        for error_pair in error_pairs:
-            self.learning_rates[error_pair] = self.default_learning_rate
+    def learning_on(self, learning_rates=()):
+        if len(learning_rates) > 0:
+            for error_pair, learning_rate in enumerate(learning_rates):
+                self.learning_rates[error_pair] = learning_rate
+        else:
+            self.learning_rates = [self.default_learning_rate for _ in range(self.num_error_pairs)]
 
     def set_error_pair_drives(self, error_pair_drives):
         self.neg_error_to_head = np.array(error_pair_drives) * self.max_neg_error_drive
@@ -255,9 +256,9 @@ class CircuitGroup:
         self.inhibition += (-self.inhibition + np.sum(self.head_out)) / self.time_constant_inhibition
 
         # update activity of head neuron
-        self.head += (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(error_responsible) +
-                      np.dot(self.neg_error_to_head, self.neg_error_out)
-                      - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
+        self.head = self.head + (-self.head + 2*self.head_out - self.inhibition + self.slow_noise(error_responsible) +
+                                 np.dot(self.neg_error_to_head, self.neg_error_out)
+                                 - np.dot(self.pos_error_to_head, self.pos_error_out)) / self.time_constant
         if self.log_head:
             self.head_log.append(self.head)
         self.head_out = np.maximum(np.tanh(self.activation_function_slope * self.head), 0)
@@ -269,7 +270,7 @@ class CircuitGroup:
         neg_error_update = -self.neg_error - self.head_out + self.neg_error_input
         if external_input is not None:
             neg_error_update += external_input
-        self.neg_error += neg_error_update / self.time_constant_error
+        self.neg_error = self.neg_error + neg_error_update / self.time_constant_error
         self.neg_error_queue.appendleft(self.neg_error)
         if self.log_neg_error:
             self.neg_error_log.append(self.neg_error)
@@ -391,6 +392,7 @@ class ConvolutionalNet:
         self.neuron_groups = []
         self.dummy = Dummy()
 
+    # NEW
     def stack_layer(self, name, group_parameters, num_features, kernel_size, stride, offset=(0, 0), log_head=False,
                     log_head_out=False, log_neg_error=False, log_neg_error_diff=False, log_neg_error_out=False,
                     log_pos_error_out=False, log_weights=False, log_noise_amplitude=False, terminal=False):

@@ -3,7 +3,7 @@ import numpy as np
 from mismatch import ConvolutionalNet
 from parameters import pixels, macropixels
 
-learn = False
+learn = True
 
 net = ConvolutionalNet(10, 5)
 net.stack_layer('p', pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
@@ -15,9 +15,9 @@ input_image = np.zeros((10, 5))
 
 if learn:
     start_time = time.time()
-    net.run(input_image, 3000, 2)
+    net.run((3000, 3000), input_image)
     input_image = np.ones((10, 5))
-    net.run(input_image, 3000, 2)
+    net.run((3000, 3000), input_image)
     print(time.time() - start_time)
     net.save_weights('weights/maps_line')
 else:
@@ -26,7 +26,7 @@ else:
 net.learning_off(((0, (0, 1)), (1, (0,))))
 input_image = np.zeros((10, 5))
 input_image[4, :] = 1
-net.run(input_image, 200, 2)
+net.run((200, 200), input_image)
 
 print("plotting...")
 net.plot(show=True, plot_weights=True)
