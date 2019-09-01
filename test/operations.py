@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import operations, macropixels, symbols, pixels
 
-train = 1
+train = 0
 test = 1
 weights_folder_name = 'weights/operations'
 
@@ -12,8 +12,8 @@ image_size = (70, 10)
 net = ConvolutionalNet(image_size[0], image_size[1])
 net.stack_layer('p', group_parameters=pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
 net.stack_layer('m', group_parameters=macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
-net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(14, 9), offset=(1, 1))
-net.stack_layer('o', group_parameters=operations, num_features=3, kernel_size=(5, 1), stride=(5, 1), terminal=True)
+net.stack_layer('s', group_parameters=symbols, num_features=12, kernel_size=(11, 7), stride=(14, 9), offset=(1, 1))
+net.stack_layer('o', group_parameters=operations, num_features=15, kernel_size=(5, 1), stride=(5, 1), terminal=True)
 net.initialize_weights()
 net.share_weights()
 
@@ -22,7 +22,11 @@ symbols_folder_name = './../symbols/math 14x10'
 for symbol in listdir(symbols_folder_name):
     symbols[symbol] = np.loadtxt(symbols_folder_name + '/' + symbol)
 
-training_examples = [['0', '+', '0', '=', '0'], ['1', '+', '0', '=', '1']]
+training_examples = [['0', '+', '0', '=', '0'], ['0', '+', '1', '=', '1'], ['0', '+', '2', '=', '2'],
+                     ['0', '+', '3', '=', '3'], ['0', '+', '4', '=', '4'], ['1', '+', '1', '=', '2'],
+                     ['1', '+', '2', '=', '3'], ['1', '+', '3', '=', '4'], ['1', '+', '4', '=', '5'],
+                     ['2', '+', '2', '=', '4'], ['2', '+', '3', '=', '5'], ['2', '+', '4', '=', '6'],
+                     ['3', '+', '3', '=', '6'], ['3', '+', '4', '=', '7'], ['4', '+', '4', '=', '8']]
 training_rounds = 1
 
 training_steps = 3000
@@ -50,7 +54,7 @@ if test:
     net.learning_off(((0, (0, 1)), (1, (0, 1)), (2, (0, 1)), (3, (0,))))
     net.noise_off((0, 1, 2, 3))
 
-    test_examples = [['0', '+', '0e', '=', '1']]
+    test_examples = [['0', '+', '0e', '=', '0']]
     blank_image = np.zeros(image_size)
     num_steps = 80
 
@@ -71,11 +75,11 @@ if test:
                 net.run((num_steps, num_steps, num_steps, num_steps), input_image)
 
         net.run((num_steps, num_steps, num_steps, num_steps), input_image)
-        net.plot(plot_weights=False, show=False)
-
-        print("top down")
-        net.set_error_pair_drives([0, 1])
-        net.run((num_steps, num_steps*2, num_steps*2, num_steps*2), input_image)
-        print("plotting")
         net.plot(plot_weights=False, show=True)
+
+        # print("top down")
+        # net.set_error_pair_drives([0, 1])
+        # net.run((num_steps, num_steps*2, num_steps*2, num_steps*2), input_image)
+        # print("plotting")
+        # net.plot(plot_weights=False, show=True)
 

@@ -1,13 +1,14 @@
 time_constant = 20
 time_constant_inhibition = time_constant/10
 time_constant_error = time_constant/10
+time_constant_noise = time_constant*3
 neg_error_delay = 3*time_constant
 
 learning_rate = 0.01
 redistribution_rate = 0.002
 redistribution_noise = 0.1
 
-dendrite_threshold = 2/3
+dendrite_threshold = 0.92
 activation_function_slope = 3
 head_external_threshold = 0.5
 

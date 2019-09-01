@@ -1,6 +1,7 @@
 time_constant = 20
 time_constant_inhibition = time_constant/10
 time_constant_error = time_constant/10
+time_constant_noise = time_constant*3
 neg_error_delay = 3*time_constant
 
 learning_rate = 0.01
@@ -18,6 +19,6 @@ noise_max_amplitude = 0.3
 noise_period = 10*time_constant
 noise_rise_rate = 0.00005
 noise_fall_rate = 0.0002
-noise_smoothing_factor = 0.995
+
 
 

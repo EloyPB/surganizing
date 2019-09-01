@@ -131,9 +131,11 @@ class CircuitGroup:
         self.noise_target = np.zeros(num_circuits)
         self.noise_step_num = 0
         self.noise_period = parameters.noise_period
-        self.noise_smoothing_factor = parameters.noise_smoothing_factor
+        self.time_constant_noise = parameters.time_constant_noise
         # the noise_target is selected in the range [-noise_amplitude, noise_amplitude]
-        self.noise_amplitude = parameters.noise_max_amplitude*np.ones(self.num_circuits)
+        # self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits) * np.random.rand(
+        #     self.num_circuits)
+        self.noise_amplitude = parameters.noise_max_amplitude * np.ones(self.num_circuits)
         # noise_amplitude increases constantly with noise_rise_rate saturating at noise_max_amplitude and
         # decays with noise_fall_rate when h_out is above noise_fall_threshold
         self.noise_max_amplitude = parameters.noise_max_amplitude
@@ -190,7 +192,8 @@ class CircuitGroup:
             self.noise_target = np.random.uniform(0, self.noise_amplitude, self.num_circuits)
 
         # low-pass filter the noise_target
-        self.noise = self.noise_smoothing_factor * self.noise + (1 - self.noise_smoothing_factor) * self.noise_target
+        self.noise = self.noise + (-self.noise + self.noise_target)/self.time_constant_noise
+
         return self.noise
 
     def dendrite_nonlinearity(self, input_values):

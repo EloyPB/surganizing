@@ -3,10 +3,10 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import pixels, macropixels, symbols
 
-learn = [1, 1]
+learn = [0, 1]
 training_rounds = 1
 weights_folder = 'weights/operations'
-symbols_to_learn = ['0', '1', '2', '=', '+']
+symbols_to_learn = ['5', '6', '7', '8', '0', '1', '2', '3', '4', '=', '+']
 test = 1
 
 image_shape = (14, 10)
@@ -14,7 +14,7 @@ net = ConvolutionalNet(image_shape[0], image_shape[1])
 net.stack_layer('p', group_parameters=pixels, num_features=2, kernel_size=(1, 1), stride=(1, 1))
 net.stack_layer('m', group_parameters=macropixels, num_features=2, kernel_size=(2, 2), stride=(1, 1))
 # net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(13, 9), offset=(1, 1))
-net.stack_layer('s', group_parameters=symbols, num_features=6, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
+net.stack_layer('s', group_parameters=symbols, num_features=12, kernel_size=(11, 7), stride=(14, 10), offset=(1, 1))
 net.initialize_weights()
 net.share_weights()
 
