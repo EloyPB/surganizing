@@ -1,3 +1,5 @@
+"""Weight homogenization demo. Learns A -> C, then B -> becomes integrated."""
+
 import time
 import numpy as np
 from mismatch import CircuitGroup

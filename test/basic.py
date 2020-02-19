@@ -1,3 +1,7 @@
+"""Shows the basic functionality of the circuit, by activating each of the units in a group of circuits and letting
+the units in another group self-organize to respond to these inputs.
+"""
+
 import time
 import numpy as np
 from mismatch import CircuitGroup
