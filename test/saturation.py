@@ -1,3 +1,6 @@
+"""Learns more patterns than it can store, overwriting the one which is no longer presented."""
+
+
 import time
 import numpy as np
 from mismatch import CircuitGroup

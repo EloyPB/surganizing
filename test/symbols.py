@@ -1,9 +1,12 @@
+"""Learn symbols in a three layered convolutional network."""
+
+
 import numpy as np
 from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import pixels, macropixels, symbols
 
-learn = [0, 1]
+learn = [1, 1]
 training_rounds = 1
 weights_folder = 'weights/operations'
 symbols_to_learn = ['5', '6', '7', '8', '0', '1', '2', '3', '4', '=', '+']

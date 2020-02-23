@@ -1,3 +1,6 @@
+"""Shows how weights are largely unaffected by transients."""
+
+
 import time
 import numpy as np
 from mismatch import CircuitGroup

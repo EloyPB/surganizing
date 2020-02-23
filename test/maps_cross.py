@@ -1,3 +1,6 @@
+"""Two layered convolutional network learns two simple symbols."""
+
+
 import time
 import numpy as np
 from mismatch import ConvolutionalNet

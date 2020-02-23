@@ -1,3 +1,6 @@
+"""Two layered convolutional network detects borders."""
+
+
 import time
 import numpy as np
 from mismatch import ConvolutionalNet

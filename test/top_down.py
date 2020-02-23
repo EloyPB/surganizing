@@ -1,3 +1,6 @@
+"""Learns a pattern and does pattern completion using the top-down input."""
+
+
 import time
 import numpy as np
 from mismatch import CircuitGroup

@@ -1,3 +1,7 @@
+"""Activates each of the units in a group of circuits and letting the units in another group self-organize to respond
+to these inputs. Displays the evolution of the intrinsic noise."""
+
+
 import random
 import numpy as np
 from mismatch import CircuitGroup
@@ -11,7 +15,6 @@ feedforward_input_pairs = [[0], [0]]
 log_noise_amplitude = True
 log_weights = False
 
-presentations = size * 2
 
 A = CircuitGroup(name="A", parameters=parameters, num_circuits=sizes[0], num_error_pairs=num_error_pairs[0],
                  feedforward_input_pairs=feedforward_input_pairs[0], log_noise_amplitude=log_noise_amplitude,
