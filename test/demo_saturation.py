@@ -1,4 +1,4 @@
-"""Demonstration of learning, weight homogenization, pattern separation, and reactivation"""
+"""Demonstration of the evolution of intrinsic noise levels and the overwriting of the least used unit."""
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,15 +8,16 @@ from mismatch import CircuitGroup
 import parameters.basic as parameters
 
 
-names = ["A", "B", "C", "D", "E"]
-sizes = [1, 1, 1, 1, 2]
-num_error_pairs = [2, 2, 2, 2, 1]
-feedforward_input_pairs = [[], [], [], [], [0]]
+names = ["A", "B", "C", "D"]
+sizes = [1, 1, 1, 2]
+num_error_pairs = [2, 2, 2, 1]
+feedforward_input_pairs = [[], [], [], [0]]
 
-training_steps = 1200
-few_steps = 200
+training_steps = 3000
+few_steps = 1000
+reset_steps = 200
 
-log_noise_amplitude = False
+log_noise_amplitude = True
 log_weights = True
 
 circuit_groups = []
@@ -30,79 +31,40 @@ for circuit_group in circuit_groups[:-1]:
     circuit_group.enable_connections(input_groups=[circuit_groups[-1]], target_error_pair=1)
     circuit_group.set_error_pair_drives([1, 0])
     circuit_group.redistribution_rate = 0
-    circuit_group.initialize_weights()
     circuit_group.noise_max_amplitude = 0
+    circuit_group.initialize_weights()
 
     circuit_groups[-1].enable_connections(input_groups=[circuit_group], target_error_pair=0)
     circuit_groups[-1].set_error_pair_drives([1])
     circuit_groups[-1].initialize_weights()
 
 
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-external_input[0][0, 0] = 1
-for t in range(training_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
+def run(active_group_num, steps):
+    external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
+    if active_group_num is not None:
+        external_input[active_group_num][0, 0] = 1
+    for t in range(steps):
+        for group_num, group in enumerate(circuit_groups):
+            group.step(external_input=external_input[group_num])
 
-external_input[1][0, 0] = 1
-for t in range(training_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
 
-external_input[2][0, 0] = 1
-for t in range(training_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
+run(active_group_num=0, steps=training_steps)
+run(active_group_num=None, steps=reset_steps)
+run(active_group_num=1, steps=training_steps)
+run(active_group_num=None, steps=reset_steps)
 
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-for t in range(few_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
+for i in range(8):
+    run(active_group_num=i % 2 + 1, steps=few_steps)
+    run(active_group_num=None, steps=reset_steps)
 
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-external_input[2][0, 0] = 1
-external_input[3][0, 0] = 1
-for t in range(training_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
-
-circuit_groups[-1].noise_max_amplitude = 0
-
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-for t in range(few_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
-
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-external_input[0][0, 0] = 1
-external_input[1][0, 0] = 1
-external_input[2][0, 0] = 1
-for t in range(few_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
-
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-for t in range(few_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
-
-external_input = [np.zeros((num_s_pairs, size)) for num_s_pairs, size in zip(num_error_pairs, sizes)]
-external_input[2][0, 0] = 1
-external_input[3][0, 0] = 1
-for t in range(few_steps):
-    for group_num, group in enumerate(circuit_groups):
-        group.step(external_input=external_input[group_num])
 
 print("plotting...")
-
-# for circuit_group in circuit_groups:
-#     circuit_group.plot_circuits(show=False)
 
 orange = LinearSegmentedColormap.from_list('orange', [colors.to_rgba('C1', 0), colors.to_rgba('C1', 1)], N=100)
 green = LinearSegmentedColormap.from_list('green', [colors.to_rgba('C2', 0), colors.to_rgba('C2', 1)], N=100)
 blue = LinearSegmentedColormap.from_list('blue', [colors.to_rgba('C0', 0), colors.to_rgba('C0', 1)], N=100)
 
-fig, axes = plt.subplots(4, 1, sharex='col', gridspec_kw={'height_ratios': (4, 2, 10, 10)})
+fig, axes = plt.subplots(5, 1, sharex='col', gridspec_kw={'height_ratios': (3, 2, 10, 10, 10)})
 
 h = np.empty((sum(sizes), len(circuit_groups[0].head_out_log)))
 p = np.empty((sum(sizes), len(circuit_groups[0].head_out_log)))
@@ -134,25 +96,31 @@ axes[1].set_yticklabels(circuit_names[sum(sizes[:-1]):])
 axes[1].set_yticks(np.arange(-0.5, sizes[-1]), minor=True)
 axes[1].yaxis.grid(True, which="minor")
 
+for circuit_num in range(circuit_groups[-1].num_circuits):
+    label = r'$W_{' + circuit_groups[-1].names[circuit_num] + '}$'
+    axes[2].plot(np.array(circuit_groups[-1].noise_amplitude_log)[:, circuit_num], label=label)
+axes[2].set_ylabel('Intrinsic\nnoise amplitudes')
+axes[3].legend(loc="upper right", fontsize="small")
+
 num_input_circuits = circuit_groups[-1].weights[0].shape[0]
 for circuit_num in range(circuit_groups[-1].num_circuits):
     for input_num in range(num_input_circuits):
         label = r'$W_{' + circuit_groups[-1].input_names[0][input_num] + r'.h\rightarrow ' \
                 + circuit_groups[-1].names[circuit_num] + '.n_' + str(0) + '}$'
-        axes[2].plot(np.array(circuit_groups[-1].weights_log[0])[:, input_num, circuit_num], label=label)
-axes[2].set_ylim([0, 1.3])
-axes[2].legend(loc="upper left", ncol=8, fontsize="small")
+        axes[3].plot(np.array(circuit_groups[-1].weights_log[0])[:, input_num, circuit_num], label=label)
+axes[3].set_ylim([0, 1.3])
+axes[3].legend(loc="upper left", ncol=8, fontsize="small")
 
 for circuit_group in circuit_groups[:-1]:
     for input_num in range(sizes[-1]):
         label = r'$W_{' + circuit_group.input_names[1][input_num] + r'.h\rightarrow ' \
                     + circuit_group.names[0] + '.n_' + str(1) + '}$'
-        axes[3].plot(np.array(circuit_group.weights_log[1])[:, input_num, 0], label=label)
-axes[3].legend(loc="upper left", ncol=8, fontsize="small")
-axes[3].set_xlabel("Simulation steps")
-axes[3].set_xlim([0, len(circuit_groups[0].head_out_log)])
-axes[3].set_ylim([0, 1.3])
+        axes[4].plot(np.array(circuit_group.weights_log[1])[:, input_num, 0], label=label)
+axes[4].legend(loc="upper left", ncol=8, fontsize="small")
+axes[4].set_xlabel("Simulation steps")
+axes[4].set_xlim([0, len(circuit_groups[0].head_out_log)])
+axes[4].set_ylim([0, 1.3])
 
-# plt.savefig("demo_basic.pdf")
+# plt.savefig("demo_noise.pdf")
 plt.show()
 
