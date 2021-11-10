@@ -3,7 +3,7 @@ from os import listdir
 from mismatch import ConvolutionalNet
 from parameters import operations, macropixels, symbols, pixels
 
-train = 0
+train = 1
 test = 1
 weights_folder_name = 'weights/operations'
 
